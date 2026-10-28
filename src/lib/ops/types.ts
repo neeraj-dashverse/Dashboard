@@ -469,6 +469,8 @@ export type QualityReview = {
 
 export type OpsSnapshot = {
   today: string;
+  /** True when this snapshot was hydrated from Google Sheets. */
+  live: boolean;
   /** Dashverse<>PFM Master Sheet */
   source: SheetSource;
   /** Neeraj Master Tracker — primary write target for day-to-day ops */

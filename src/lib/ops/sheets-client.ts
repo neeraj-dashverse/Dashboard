@@ -8,16 +8,29 @@ export type Grid = string[][];
 
 let cachedClient: ReturnType<typeof google.sheets> | null = null;
 
+/**
+ * Vercel often stores the key with surrounding quotes and literal `\n`.
+ * Strip those so JWT auth does not silently fail into mock data.
+ */
+export function googlePrivateKey(): string {
+  let key = (process.env.GOOGLE_PRIVATE_KEY || "").trim();
+  if (
+    (key.startsWith('"') && key.endsWith('"')) ||
+    (key.startsWith("'") && key.endsWith("'"))
+  ) {
+    key = key.slice(1, -1);
+  }
+  return key.replace(/\\n/g, "\n").trim();
+}
+
 export function hasSheetCredentials(): boolean {
-  return Boolean(
-    process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY
-  );
+  return Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && googlePrivateKey());
 }
 
 function sheetsClient() {
   if (cachedClient) return cachedClient;
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const key = (process.env.GOOGLE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+  const key = googlePrivateKey();
   if (!email || !key) throw new Error("Missing Google service-account credentials");
   const auth = new google.auth.JWT({
     email,

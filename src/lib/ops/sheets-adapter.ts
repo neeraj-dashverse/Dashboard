@@ -207,6 +207,7 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
 
   return {
     today: todayIso(),
+    live: true,
     source: source(
       DASHVERSE_PFM_SHEET.spreadsheetId,
       DASHVERSE_PFM_SHEET.spreadsheetName,

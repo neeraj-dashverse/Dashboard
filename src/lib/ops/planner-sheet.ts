@@ -9,7 +9,7 @@
  */
 import { google } from "googleapis";
 import { PFM_TIMELINE_SHEET } from "./sheet-registry";
-import { text } from "./sheets-client";
+import { googlePrivateKey, text } from "./sheets-client";
 import type { PlannerCell } from "./types";
 import { promoJoinKey } from "./types";
 
@@ -22,7 +22,7 @@ let writeClient: ReturnType<typeof google.sheets> | null = null;
 function sheets() {
   if (writeClient) return writeClient;
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const key = (process.env.GOOGLE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+  const key = googlePrivateKey();
   if (!email || !key) throw new Error("Missing Google service-account credentials");
   const auth = new google.auth.JWT({
     email,

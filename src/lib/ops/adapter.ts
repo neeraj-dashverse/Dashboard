@@ -72,4 +72,13 @@ function selectAdapter(): OpsAdapter {
   return guarded;
 }
 
-export const opsAdapter: OpsAdapter = selectAdapter();
+/** Resolve on each use so serverless always sees current env vars. */
+export const opsAdapter: OpsAdapter = {
+  load: () => selectAdapter().load(),
+  act: (action) => selectAdapter().act(action),
+  flushWrites: () => selectAdapter().flushWrites(),
+  reset: () => {
+    const a = selectAdapter();
+    return a.reset ? a.reset() : a.load();
+  },
+};

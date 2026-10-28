@@ -22,6 +22,7 @@ let snapshot: OpsSnapshot = seed();
 function seed(): OpsSnapshot {
   return {
     today: MOCK_TODAY,
+    live: false,
     source: structuredClone(MOCK_SOURCE),
     workingSource: structuredClone(MOCK_WORKING_SOURCE),
     assetsSource: structuredClone(MOCK_ASSETS_SOURCE),
@@ -47,6 +48,7 @@ let liveHydrated = false;
 
 export function markLiveHydrated(): void {
   liveHydrated = true;
+  snapshot.live = true;
 }
 
 export function hasLiveHydration(): boolean {
@@ -54,7 +56,7 @@ export function hasLiveHydration(): boolean {
 }
 
 export function getSnapshot(): OpsSnapshot {
-  return structuredClone(snapshot);
+  return { ...structuredClone(snapshot), live: liveHydrated };
 }
 
 /** Replace the live store with a snapshot loaded from Sheets (or elsewhere). */
@@ -469,6 +471,7 @@ export function setDismissedNudgeIds(ids: string[]): void {
 }
 
 export function resetToMock(): OpsSnapshot {
+  liveHydrated = false;
   snapshot = seed();
   return getSnapshot();
 }
