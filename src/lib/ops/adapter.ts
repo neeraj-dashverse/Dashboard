@@ -44,7 +44,6 @@ function selectAdapter(): OpsAdapter {
   if (!hasCreds) return mockAdapter;
 
   // Lazy require avoids pulling googleapis into the mock path / client bundles.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { sheetsAdapter, loadFromSheets } = require("./sheets-adapter") as typeof import("./sheets-adapter");
 
   const guarded: OpsAdapter = {

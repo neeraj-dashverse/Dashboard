@@ -18,6 +18,7 @@ function detail(label: string, value: string | null | undefined) {
 
 export function PromoPlan({ promoId }: { promoId: string }) {
   const { snap, act, busy } = useOps();
+  const [saveError, setSaveError] = useState<string | null>(null);
   const promo = snap.promos.find((p) => p.id === promoId);
   if (!promo) {
     return (
@@ -39,8 +40,6 @@ export function PromoPlan({ promoId }: { promoId: string }) {
   const parts = [...byPart.values()].sort((a, b) => a.partNo - b.partNo);
   const animators = [...new Set(parts.map((p) => p.artist).filter(Boolean))].join(", ");
   const editors = [...new Set(parts.map((p) => p.editors).filter(Boolean))].join(", ");
-
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   const save = async (partNo: number, date: string, label: string, re: RegExp) => {
     if (!date) return;
