@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  font-size: 14.5px;
+  --dv-bg: #0a0a0d;
+  --dv-surface: #121216;
+  --dv-blue: #4361ee;
+  --dv-crimson: #d6293d;
+}
+
+body {
+  @apply bg-[#0a0a0d] text-slate-100 antialiased;
+  background-color: #0a0a0d;
+  background-image:
+    radial-gradient(ellipse at 100% 0%, rgba(214, 41, 61, 0.14), transparent 42%),
+    radial-gradient(ellipse at 0% 100%, rgba(67, 97, 238, 0.08), transparent 40%);
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+.gradient-text {
+  background: linear-gradient(105deg, #4361ee 0%, #7b4fd4 45%, #d6293d 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.gradient-bar {
+  background: linear-gradient(90deg, #4361ee, #d6293d);
+}
+
+* {
+  scrollbar-color: #3a3a44 transparent;
+  scrollbar-width: thin;
+}

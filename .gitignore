@@ -1,0 +1,17 @@
+node_modules
+.next
+out
+build
+.DS_Store
+
+# Secrets — never commit
+.env
+.env.local
+.env*.local
+*service-account*.json
+gcp-key*.json
+
+# scratch
+.tmpcfg
+next-env.d.ts
+tsconfig.tsbuildinfo
