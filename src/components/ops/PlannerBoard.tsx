@@ -288,10 +288,10 @@ function Grid({
   const isAsset = tab === "preprod";
   const stick = "sticky z-10 bg-[#121216] border-b border-white/[0.05] px-2 py-1.5 align-top";
   const head =
-    "sticky top-0 z-20 border-b border-white/[0.08] bg-[#17171d] px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500";
+    "sticky top-0 z-40 border-b border-white/[0.08] bg-[#17171d] px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500";
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-white/[0.08] bg-[#121216]">
+    <div className="max-h-[calc(100dvh-15rem)] overflow-auto rounded-xl border border-white/[0.08] bg-[#121216]">
       <table className="border-separate border-spacing-0 text-left">
         <thead>
           <tr>
@@ -351,7 +351,7 @@ function Grid({
               return (
                 <th
                   key={d}
-                  className={`sticky top-0 z-10 min-w-[108px] border-b border-white/[0.08] px-1.5 py-2 text-[11px] font-bold ${
+                  className={`sticky top-0 z-30 min-w-[108px] border-b border-white/[0.08] px-1.5 py-2 text-[11px] font-bold ${
                     holiday
                       ? "bg-[#2a2218] text-amber-100/90"
                       : today
