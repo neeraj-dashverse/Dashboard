@@ -46,6 +46,7 @@ import {
   consumeLastWriteTarget,
   flushPendingWrites,
   getSnapshot,
+  hasLiveHydration,
   hydrate,
   markLiveHydrated,
   setDismissedNudgeIds,
@@ -276,6 +277,12 @@ export const sheetsAdapter: OpsAdapter = {
     return hydrateFromSheetsAndDb();
   },
   async act(action) {
+    // Each Vercel request starts empty. A plan save must not answer with the
+    // sample promos, or the open promo page loses the row it just edited.
+    if (!hasLiveHydration()) {
+      await hydrateFromSheetsAndDb();
+    }
+
     if (action.type === "dismiss_nudge") {
       await persistDismissNudge(action.nudgeId);
       applyAction(action, { recordWrite: false });

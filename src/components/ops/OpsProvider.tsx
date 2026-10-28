@@ -39,7 +39,8 @@ export function OpsProvider({
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error("action failed");
-      setSnap(await res.json());
+      const next = (await res.json()) as OpsSnapshot;
+      setSnap((cur) => (cur.live && next.live === false ? cur : next));
     } finally {
       setBusy(false);
     }
