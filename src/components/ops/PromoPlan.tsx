@@ -72,8 +72,8 @@ export function PromoPlan({ promoId }: { promoId: string }) {
             <tr>
               <th className="px-3 py-2"> </th>
               <th className="px-3 py-2">Pick date</th>
-              <th className="px-3 py-2">Planned / First cut</th>
-              <th className="px-3 py-2">Second cut</th>
+              <th className="px-3 py-2">Rough cut</th>
+              <th className="px-3 py-2">Final cut</th>
               <th className="px-3 py-2">Sound</th>
               <th className="px-3 py-2">Record</th>
               <th className="px-3 py-2">Remarks</th>
@@ -90,7 +90,7 @@ export function PromoPlan({ promoId }: { promoId: string }) {
                 open={!promoClosed && !assetsClosed}
                 slots={[
                   { label: "Assets", match: "asset", enabled: true },
-                  { label: "Second cut", match: "second cut|correction close", enabled: false },
+                  { label: "Final cut", match: "final cut|second cut|correction close", enabled: false },
                   { label: "Sound", match: "sound", enabled: false },
                 ]}
               />
@@ -116,8 +116,8 @@ export function PromoPlan({ promoId }: { promoId: string }) {
                   cells={snap.plannerCells}
                   open={!promoClosed && part.stage !== "delivered"}
                   slots={[
-                    { label: "First cut", match: "first cut|first animation|first edit", enabled: true },
-                    { label: "Second cut", match: "second cut|correction close", enabled: true },
+                    { label: "Rough cut", match: "rough cut|first cut|first animation|first edit", enabled: true },
+                    { label: "Final cut", match: "final cut|second cut|correction close", enabled: true },
                     { label: "Sound", match: "sound", enabled: true },
                   ]}
                 />

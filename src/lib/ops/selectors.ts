@@ -441,8 +441,8 @@ function marksFor(
     if (kind === "asset") {
       if (/asset/i.test(text)) note = "Assets";
     } else if (/sound/i.test(text)) note = "Sound";
-    else if (/second cut|correction close/i.test(text)) note = "Second cut";
-    else if (/first cut|first animation|first edit/i.test(text)) note = "First cut";
+    else if (/final cut|second cut|correction close/i.test(text)) note = "Final cut";
+    else if (/rough cut|first cut|first animation|first edit/i.test(text)) note = "Rough cut";
     if (note) out.push({ date: cell.date, note });
   }
   return out;
@@ -450,8 +450,7 @@ function marksFor(
 
 function productionPlannedDate(snap: OpsSnapshot, promo: Promo, part: Part): string | null {
   return (
-    cellPlanDate(snap, promo.id, part.partNo, /first animation/i) ??
-    cellPlanDate(snap, promo.id, part.partNo, /first\s*cut/i) ??
+    cellPlanDate(snap, promo.id, part.partNo, /rough cut|first animation|first\s*cut/i) ??
     part.deadline
   );
 }
