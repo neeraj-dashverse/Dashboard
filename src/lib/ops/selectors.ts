@@ -649,7 +649,7 @@ function assetLaneOn(
 /**
  * Production stage occupying `day`. A filled close column ends that stage on
  * that day: O first cut · R edit received · T correction · W sound.
- * Animation timeline starts on Planning & Plotting (L).
+ * Sound is drawn only when W has a date. Animation timeline starts on Planning & Plotting (L).
  */
 function productionLaneOn(
   part: Part,
@@ -683,10 +683,10 @@ function productionLaneOn(
     return null;
   }
 
+  // Sound only when column W is filled. Do not invent it after edit or correction.
+  const soundFrom = T ?? R;
+  if (W && soundFrom && day > soundFrom && day < W) return mk("Sound");
   if (W && day > W) return null;
-
-  const soundFrom = T ?? (S ? null : R);
-  if (soundFrom && day > soundFrom && (!W || day < W)) return mk("Sound");
 
   if (S && day >= S && (!T || day < T)) return mk("Correction");
   if (!S && R && T && day > R && day < T) return mk("Correction");

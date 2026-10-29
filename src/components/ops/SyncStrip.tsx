@@ -4,7 +4,7 @@ import { useOps } from "./OpsProvider";
 
 /** Compact live-data status bar: source, unsaved edits, sheet links, actions. */
 export function SyncStrip() {
-  const { snap, flush, reset, busy } = useOps();
+  const { snap, reset, busy } = useOps();
   const pending = snap.pendingWrites.filter((w) => w.status === "pending").length;
   const live = snap.live;
 
@@ -43,14 +43,6 @@ export function SyncStrip() {
         >
           Assets ↗
         </a>
-        <button
-          type="button"
-          disabled={busy || pending === 0}
-          onClick={() => flush()}
-          className="rounded-md bg-gradient-to-r from-[#4361ee] to-[#d6293d] px-2.5 py-1 text-[11px] font-bold text-white disabled:opacity-40"
-        >
-          Sync to sheet{pending > 0 ? ` (${pending})` : ""}
-        </button>
         <button
           type="button"
           disabled={busy}
