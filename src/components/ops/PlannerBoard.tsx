@@ -439,7 +439,7 @@ function Grid({
             const dayClass = (d: string, delayed: boolean) =>
               `${DAY_COL} border-b border-white/[0.05] p-1 align-middle ${
                 delayed
-                  ? "bg-rose-500/55 shadow-[inset_0_0_0_3px_#fb7185]"
+                  ? "bg-rose-500/55"
                   : isHoliday(d)
                     ? "bg-[repeating-linear-gradient(135deg,rgba(245,158,11,0.07)_0_6px,transparent_6px_12px)]"
                     : d === snapToday
