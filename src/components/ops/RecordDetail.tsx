@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { formatDmy, formatDuration, STAGE_LABEL } from "@/lib/ops/selectors";
-import type { Part, Promo, QualityReview } from "@/lib/ops/types";
+import type { AssetTeamRow, Part, PreProdAssetRow, Promo, QualityReview } from "@/lib/ops/types";
 import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
 
@@ -136,32 +136,16 @@ export function RecordDetail({ promoId }: { promoId: string }) {
         </div>
       )}
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <InfoCard
-          title="Assets"
-          lines={[
-            asset?.assetsStatus,
-            [asset?.artist1, asset?.artist2, asset?.artist3, asset?.artLead].filter(Boolean).join(", "),
-            asset?.startDate || asset?.endDate
-              ? `${when(asset?.startDate) || "—"} → ${when(asset?.endDate) || "—"}`
-              : "",
-            asset?.correctionsEndDate ? `Corrections closed ${when(asset.correctionsEndDate)}` : "",
-            asset?.assetsCount,
-          ]}
-          note={[asset?.remarks, asset?.dashverseNotes].filter(Boolean).join("\n")}
-        />
-        <InfoCard
-          title="Pre-production"
-          lines={[
-            pre?.status,
-            pre?.artist,
-            pre?.totalAssets != null ? `${pre.totalAssets} assets` : "",
-            pre?.plannedDate ? `Planned ${when(pre.plannedDate)}` : "",
-            pre?.closedDate ? `Closed ${when(pre.closedDate)}` : "",
-          ]}
-          note={pre?.remarksLog.map((entry) => entry.body).join("\n") ?? ""}
-        />
-      </div>
+      <InfoCard
+        title="Pre-production"
+        lines={preproductionLines(asset, pre)}
+        note={uniqueText([
+          asset?.remarks,
+          asset?.dashverseNotes,
+          asset?.notes,
+          pre?.remarksLog.map((entry) => entry.body).join("\n"),
+        ]).join("\n")}
+      />
 
       <section className="space-y-2">
         <h2 className="text-[13px] font-bold text-white">Parts</h2>
@@ -253,6 +237,35 @@ function Pill({ children }: { children: ReactNode }) {
       {children}
     </span>
   );
+}
+
+function preproductionLines(
+  asset: AssetTeamRow | null | undefined,
+  pre: PreProdAssetRow | null | undefined
+): string[] {
+  const people = uniqueText([
+    [asset?.artist1, asset?.artist2, asset?.artist3, asset?.artLead].filter(Boolean).join(", "),
+    pre?.artist,
+  ]);
+  const start = when(asset?.startDate || pre?.startDate);
+  const end = when(asset?.correctionsEndDate || asset?.endDate || pre?.closedDate);
+  const planned = when(pre?.plannedDate);
+  const count =
+    asset?.assetsCount || (pre?.totalAssets != null ? `${pre.totalAssets} assets` : "");
+  const days =
+    asset?.totalDays != null
+      ? `${asset.totalDays} days`
+      : asset?.productionDays != null
+        ? `${asset.productionDays} days`
+        : "";
+  return uniqueText([
+    asset?.assetsStatus || pre?.status || "",
+    ...people,
+    start && end ? `${start} → ${end}` : start || end,
+    planned && planned !== end ? `Planned ${planned}` : "",
+    count,
+    days,
+  ]);
 }
 
 function InfoCard({
