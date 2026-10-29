@@ -98,8 +98,8 @@ function addDays(iso: string, n: number): string {
 }
 
 const DAY_COL = "min-w-[150px] w-[150px]";
-const W_PROD = { show: 112, promo: 128, part: 44, artist: 100, editor: 100, status: 132 };
-const W_ASSET = { show: 160, promo: 128, people: 130, status: 132 };
+const W_PROD = { show: 84, promo: 96, part: 36, artist: 72, editor: 72, status: 118 };
+const W_ASSET = { show: 104, promo: 96, people: 92, status: 118 };
 const LEFT_PROD = {
   show: 0,
   promo: W_PROD.show,
@@ -331,16 +331,22 @@ function Grid({
   laneChip: (l: DayLane) => ReactNode;
 }) {
   const isAsset = tab === "preprod";
-  const stick = "sticky z-10 bg-[#121216] border-b border-white/[0.05] px-2 py-1.5 align-middle";
+  const stickyW = isAsset
+    ? W_ASSET.show + W_ASSET.promo + W_ASSET.people + W_ASSET.status
+    : W_PROD.show + W_PROD.promo + W_PROD.part + W_PROD.artist + W_PROD.editor + W_PROD.status;
+  const stick = "sticky z-10 overflow-hidden bg-[#121216] border-b border-white/[0.05] px-2 py-1.5 align-middle";
   const head =
-    "sticky top-0 z-40 border-b border-white/[0.08] bg-[#17171d] px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500";
+    "sticky top-0 z-40 overflow-hidden border-b border-white/[0.08] bg-[#17171d] px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500";
 
   return (
     <div
       ref={scrollerRef}
       className="max-h-[calc(100dvh-15rem)] overflow-auto rounded-xl border border-white/[0.08] bg-[#121216]"
     >
-      <table className="border-separate border-spacing-0 text-left">
+      <table
+        className="border-separate border-spacing-0 text-left"
+        style={{ width: stickyW + days.length * 150, tableLayout: "fixed" }}
+      >
         <thead>
           <tr>
             <th
@@ -550,7 +556,7 @@ function Grid({
                       </td>
                     </>
                   )}
-                  <td style={labelStyle} className={`${stick} border-r border-r-white/[0.08] text-center text-[12px] font-semibold text-slate-100`}>
+                  <td style={labelStyle} className={`${stick} border-r border-r-white/[0.08] whitespace-nowrap px-1 text-center text-[11px] font-semibold text-slate-100`}>
                     Planned
                   </td>
                   {days.map((d) => (
@@ -571,7 +577,7 @@ function Grid({
                   ))}
                 </tr>
                 <tr>
-                  <td style={labelStyle} className={`${stick} border-r border-r-white/[0.08] text-center text-[12px] font-semibold text-slate-100`}>
+                  <td style={labelStyle} className={`${stick} border-r border-r-white/[0.08] whitespace-nowrap px-1 text-center text-[11px] font-semibold text-slate-100`}>
                     Current status
                   </td>
                   {days.map((d) => {

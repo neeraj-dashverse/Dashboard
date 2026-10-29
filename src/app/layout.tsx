@@ -14,7 +14,7 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <div className="min-h-screen bg-[#0a0a0d]">
-          <div className="mx-auto flex min-h-screen max-w-[1800px] flex-col lg:flex-row">
+          <div className="mx-auto flex min-h-screen max-w-[1800px] flex-row">
             <Sidebar />
             <div className="min-w-0 flex-1">
               <header className="border-b border-white/[0.08] bg-[#101014]/90 px-5 py-3 backdrop-blur lg:px-7">
