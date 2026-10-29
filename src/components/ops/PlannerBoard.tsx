@@ -304,8 +304,8 @@ export function PlannerBoard() {
 
       <p className="text-[11px] text-slate-600">
         {tab === "preprod"
-          ? "WIP only. Assets fill from Start (Y) through End (Z), or through today if Z is empty. Correction fills from AB through AC."
-          : "Read-only from Production Tracker. Artist (H) and Editor (I) stay in separate columns. Stages from L / M / O / R / T / W."}
+          ? "WIP only. Current status runs from Start (Y) through today. Later days show planned dates only."
+          : "Read-only from Production Tracker. Current status runs through today. Later days show planned dates only."}
       </p>
     </div>
   );
@@ -467,7 +467,7 @@ function Grid({
                     {(isAsset || r.firstOfPromo) && (
                       <Link
                         href={`/plan/${encodeURIComponent(r.promo.id)}`}
-                        className="block truncate text-[12px] font-bold text-white hover:underline"
+                        className="line-clamp-2 text-[12px] font-bold leading-tight text-white hover:underline"
                         title={r.promo.showName || "Open promo"}
                       >
                         {r.promo.showName || "—"}
@@ -486,7 +486,7 @@ function Grid({
                     {(isAsset || r.firstOfPromo) && (
                       <Link
                         href={`/plan/${encodeURIComponent(r.promo.id)}`}
-                        className="block max-w-full truncate text-left text-[12px] font-semibold text-slate-200 hover:underline"
+                        className="line-clamp-2 text-left text-[12px] font-semibold leading-tight text-slate-200 hover:underline"
                         title="Open promo"
                       >
                         {r.promo.promoName || "—"}
@@ -503,8 +503,8 @@ function Grid({
                       }}
                       className={stick}
                     >
-                      <p className="truncate text-[11px] text-slate-300">{artist ?? "—"}</p>
-                      {editor && <p className="truncate text-[10px] text-slate-500">{editor}</p>}
+                      <p className="line-clamp-2 text-[11px] leading-tight text-slate-300">{artist ?? "—"}</p>
+                      {editor && <p className="line-clamp-2 text-[10px] leading-tight text-slate-500">{editor}</p>}
                     </td>
                   ) : (
                     <>
@@ -537,7 +537,7 @@ function Grid({
                         }}
                         className={stick}
                       >
-                        <p className="truncate text-[11px] text-slate-300" title={artist ?? undefined}>
+                        <p className="line-clamp-2 text-[11px] leading-tight text-slate-300" title={artist ?? undefined}>
                           {artist ?? "—"}
                         </p>
                       </td>
@@ -550,7 +550,7 @@ function Grid({
                         }}
                         className={stick}
                       >
-                        <p className="truncate text-[11px] text-slate-300" title={editor ?? undefined}>
+                        <p className="line-clamp-2 text-[11px] leading-tight text-slate-300" title={editor ?? undefined}>
                           {editor ?? "—"}
                         </p>
                       </td>

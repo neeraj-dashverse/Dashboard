@@ -606,7 +606,7 @@ export function productionTiming(part: Part, today: string): Timing {
 /**
  * Pre-production stage for one day, from the asset sheet only:
  * Y Start → Z End = Assets. AB Corrections Start → AC Corrections End = Correction.
- * Open spans stop at today. A future Z / AB / AC / planned day is a single pin.
+ * Open spans stop at today. Future days stay empty so only planned dates show ahead.
  */
 function assetLaneOn(
   promo: Promo,
@@ -627,13 +627,7 @@ function assetLaneOn(
     timing,
   });
 
-  if (day > today) {
-    if (AC === day) return mk("Correction", true);
-    if (AB === day) return mk("Correction", false);
-    if (Z === day) return mk("Assets", true);
-    if (planned === day && !Z && !AC) return mk("Assets", false);
-    return null;
-  }
+  if (day > today) return null;
 
   if (AC && day > AC) return null;
   if (AC && day === AC) return mk("Correction", true);
@@ -677,11 +671,8 @@ function productionLaneOn(
   if (R && day === R) return mk("Edit", true);
   if (O && day === O) return mk("Animation", true);
 
-  // Future days: sheet dates only. Planned half-day marks are drawn from the Plan page.
-  if (day > today) {
-    if (L === day && (!M || M > day)) return mk("Plotting");
-    return null;
-  }
+  // Current status never runs past today. Planned marks for later days are separate.
+  if (day > today) return null;
 
   // Sound only when column W is filled. Do not invent it after edit or correction.
   const soundFrom = T ?? R;
@@ -702,13 +693,14 @@ function productionLaneOn(
   return null;
 }
 
-/** Lanes for one cell on the active tab. */
+/** Lanes for one cell on the active tab. Nothing after today — that space is for planned dates. */
 export function dayLanes(
   row: PlannerRow,
   day: string,
   today: string,
   tab: PlannerTab
 ): DayLane[] {
+  if (day > today) return [];
   if (tab === "preprod") {
     const asset = assetLaneOn(row.promo, day, today, row.plannedDate);
     return asset ? [asset] : [];
