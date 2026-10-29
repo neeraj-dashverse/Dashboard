@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { assetClosedDate, formatDmy } from "@/lib/ops/selectors";
-import type { PlannerCell } from "@/lib/ops/types";
+import type { PlannerCell, Promo } from "@/lib/ops/types";
 import { RemarkBox } from "./PlanBoard";
 import { useOps } from "./OpsProvider";
 
@@ -17,8 +17,7 @@ function detail(label: string, value: string | null | undefined) {
 }
 
 export function PromoPlan({ promoId }: { promoId: string }) {
-  const { snap, act, busy } = useOps();
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const { snap } = useOps();
   const promo = snap.promos.find((p) => p.id === promoId);
   if (!promo) {
     return (
@@ -41,28 +40,6 @@ export function PromoPlan({ promoId }: { promoId: string }) {
   const animators = [...new Set(parts.map((p) => p.artist).filter(Boolean))].join(", ");
   const editors = [...new Set(parts.map((p) => p.editors).filter(Boolean))].join(", ");
 
-  const save = async (partNo: number, date: string, label: string, re: RegExp) => {
-    if (!date) return;
-    const existing = snap.plannerCells.filter(
-      (c) => c.promoId === promo.id && c.partNo === partNo && re.test(c.text) && c.date
-    );
-    if (existing.length > 0) return;
-    setSaveError(null);
-    try {
-      await act({
-        type: "set_plan_cell",
-        promoId: promo.id,
-        partNo,
-        date,
-        text: label,
-        showName: promo.showName,
-        promoName: promo.promoName,
-      });
-    } catch {
-      setSaveError("That date did not save to the Planner sheet. Try again.");
-    }
-  };
-
   const promoClosed = Boolean(promo.trackerStatus && /closed/i.test(promo.trackerStatus));
   const status = (asset?.assetsStatus ?? "").toLowerCase();
   const assetsClosed =
@@ -76,7 +53,6 @@ export function PromoPlan({ promoId }: { promoId: string }) {
         </Link>
         <p className="mt-3 text-[12px] font-semibold text-slate-400">{promo.showName || "Promo"}</p>
         <h1 className="mt-1 text-2xl font-extrabold text-white">{promo.promoName || promo.showName || "—"}</h1>
-        {saveError && <p className="mt-2 text-[12px] text-rose-300">{saveError}</p>}
       </div>
 
       <section className="grid gap-3 rounded-xl border border-white/[0.08] bg-[#121216] p-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -99,6 +75,7 @@ export function PromoPlan({ promoId }: { promoId: string }) {
               <th className="px-3 py-2">Planned / First cut</th>
               <th className="px-3 py-2">Second cut</th>
               <th className="px-3 py-2">Sound</th>
+              <th className="px-3 py-2">Record</th>
               <th className="px-3 py-2">Remarks</th>
             </tr>
           </thead>
@@ -106,19 +83,17 @@ export function PromoPlan({ promoId }: { promoId: string }) {
             <tr className="border-t border-white/[0.06]">
               <td className="px-3 py-3 font-semibold text-white">Asset</td>
               <td className="px-3 py-3 text-slate-300">{formatDmy(asset?.startDate)}</td>
-              <td className="px-3 py-3">
-                <DateCell
-                  cells={snap.plannerCells}
-                  promoId={promo.id}
-                  partNo={0}
-                  re={/asset/i}
-                  busy={busy}
-                  open={!promoClosed && !assetsClosed}
-                  onChange={(date) => void save(0, date, "Assets", /asset/i)}
-                />
-              </td>
-              <td className="px-3 py-3 text-slate-600">—</td>
-              <td className="px-3 py-3 text-slate-600">—</td>
+              <PlanDates
+                promo={promo}
+                partNo={0}
+                cells={snap.plannerCells}
+                open={!promoClosed && !assetsClosed}
+                slots={[
+                  { label: "Assets", match: "asset", enabled: true },
+                  { label: "Second cut", match: "second cut|correction close", enabled: false },
+                  { label: "Sound", match: "sound", enabled: false },
+                ]}
+              />
               <td className="min-w-[220px] px-3 py-3 align-top">
                 <RemarkBox promo={promo} partNo={0} />
               </td>
@@ -135,43 +110,17 @@ export function PromoPlan({ promoId }: { promoId: string }) {
                 <td className="px-3 py-3 text-slate-300">
                   {formatDmy(part.aniStartDate || part.plannedPlottedDate)}
                 </td>
-                <td className="px-3 py-3">
-                  <DateCell
-                    cells={snap.plannerCells}
-                    promoId={promo.id}
-                    partNo={part.partNo}
-                    re={/first cut|first animation|first edit/i}
-                    busy={busy}
-                    open={!promoClosed && part.stage !== "delivered"}
-                    onChange={(date) =>
-                      void save(part.partNo, date, "First cut", /first cut|first animation|first edit/i)
-                    }
-                  />
-                </td>
-                <td className="px-3 py-3">
-                  <DateCell
-                    cells={snap.plannerCells}
-                    promoId={promo.id}
-                    partNo={part.partNo}
-                    re={/second cut|correction close/i}
-                    busy={busy}
-                    open={!promoClosed && part.stage !== "delivered"}
-                    onChange={(date) =>
-                      void save(part.partNo, date, "Second cut", /second cut|correction close/i)
-                    }
-                  />
-                </td>
-                <td className="px-3 py-3">
-                  <DateCell
-                    cells={snap.plannerCells}
-                    promoId={promo.id}
-                    partNo={part.partNo}
-                    re={/sound/i}
-                    busy={busy}
-                    open={!promoClosed && part.stage !== "delivered"}
-                    onChange={(date) => void save(part.partNo, date, "Sound", /sound/i)}
-                  />
-                </td>
+                <PlanDates
+                  promo={promo}
+                  partNo={part.partNo}
+                  cells={snap.plannerCells}
+                  open={!promoClosed && part.stage !== "delivered"}
+                  slots={[
+                    { label: "First cut", match: "first cut|first animation|first edit", enabled: true },
+                    { label: "Second cut", match: "second cut|correction close", enabled: true },
+                    { label: "Sound", match: "sound", enabled: true },
+                  ]}
+                />
                 <td className="min-w-[220px] px-3 py-3 align-top">
                   <RemarkBox promo={promo} partNo={part.partNo} />
                 </td>
@@ -181,46 +130,96 @@ export function PromoPlan({ promoId }: { promoId: string }) {
         </table>
       </div>
       <p className="text-[11px] text-slate-600">
-        Pick date comes from the sheet. Plan dates are only for WIP work. Once you save a date it
-        stays.
+        Type the dates for a part, then Record. That writes them to the sheet. Change a date and
+        Record again if it was typed wrong. Remarks sit beside Record.
       </p>
     </div>
   );
 }
 
-function DateCell({
-  cells,
-  promoId,
-  partNo,
-  re,
-  busy,
-  open,
-  onChange,
-}: {
-  cells: PlannerCell[];
-  promoId: string;
-  partNo: number;
-  re: RegExp;
-  busy: boolean;
-  open: boolean;
-  onChange: (date: string) => void;
-}) {
+function savedDate(cells: PlannerCell[], promoId: string, partNo: number, match: string): string {
+  const re = new RegExp(match, "i");
   const hit = cells
-    .filter((c) => c.promoId === promoId && c.partNo === partNo && re.test(c.text))
+    .filter((c) => c.promoId === promoId && c.partNo === partNo && c.date && re.test(c.text))
     .sort((a, b) => a.date.localeCompare(b.date))[0];
-  if (hit?.date) {
-    return <span className="font-semibold text-slate-200">{formatDmy(hit.date)}</span>;
-  }
-  if (!open) return <span className="text-slate-600">—</span>;
+  return hit?.date ?? "";
+}
+
+function PlanDates({
+  promo,
+  partNo,
+  cells,
+  open,
+  slots,
+}: {
+  promo: Promo;
+  partNo: number;
+  cells: PlannerCell[];
+  open: boolean;
+  slots: { label: string; match: string; enabled: boolean }[];
+}) {
+  const { act, busy } = useOps();
+  const [error, setError] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const saved = Object.fromEntries(
+    slots.map((s) => [s.label, savedDate(cells, promo.id, partNo, s.match)])
+  );
+  const [draft, setDraft] = useState<Record<string, string>>(saved);
+  const dirty = slots.some((s) => s.enabled && (draft[s.label] ?? "") !== (saved[s.label] ?? ""));
+
+  const record = async () => {
+    setError(null);
+    setRecording(true);
+    try {
+      await act({
+        type: "record_plan_part",
+        promoId: promo.id,
+        partNo,
+        showName: promo.showName,
+        promoName: promo.promoName,
+        slots: slots
+          .filter((s) => s.enabled)
+          .map((s) => ({ label: s.label, match: s.match, date: draft[s.label] ?? "" })),
+      });
+    } catch {
+      setError("Those dates did not record. Try again.");
+    } finally {
+      setRecording(false);
+    }
+  };
+
   return (
-    <input
-      type="date"
-      disabled={busy}
-      value=""
-      onChange={(e) => {
-        if (e.target.value) onChange(e.target.value);
-      }}
-      className="rounded-md border border-white/[0.1] bg-[#0e0e13] px-2 py-1 text-[12px] text-white"
-    />
+    <>
+      {slots.map((slot) => (
+        <td key={slot.label} className="px-3 py-3">
+          {!slot.enabled || !open ? (
+            <span className={slot.enabled ? "font-semibold text-slate-200" : "text-slate-600"}>
+              {slot.enabled ? formatDmy(saved[slot.label]) || "—" : "—"}
+            </span>
+          ) : (
+            <input
+              type="date"
+              disabled={busy}
+              value={draft[slot.label] ?? ""}
+              onChange={(e) => setDraft((d) => ({ ...d, [slot.label]: e.target.value }))}
+              className="rounded-md border border-white/[0.1] bg-[#0e0e13] px-2 py-1 text-[12px] text-white"
+            />
+          )}
+        </td>
+      ))}
+      <td className="px-3 py-3 align-top">
+        {open && (
+          <button
+            type="button"
+            disabled={busy || !dirty}
+            onClick={() => void record()}
+            className="rounded-md bg-[#4361ee] px-2.5 py-1 text-[11px] font-bold text-white disabled:opacity-40"
+          >
+            {recording ? "Recording" : "Record"}
+          </button>
+        )}
+        {error && <p className="mt-1 text-[11px] text-rose-300">{error}</p>}
+      </td>
+    </>
   );
 }

@@ -411,6 +411,8 @@ export function applyAction(action: OpsAction, opts: ApplyOpts = {}): OpsSnapsho
       }
       break;
     }
+    case "record_plan_part":
+      break;
     case "set_plan_cell": {
       // Persisted straight to the Planner tab by the adapter (not the write queue).
       const text = action.text.trim();

@@ -159,6 +159,98 @@ export function writePlannerCell(args: {
   return next as Promise<void>;
 }
 
+/** Replace every plan date for one part. One sheet read, then one batch of writes. */
+export function syncPlanPart(args: {
+  showName: string;
+  promoName: string;
+  promoId: string;
+  partNo: number;
+  updatedAt: string;
+  slots: { label: string; date: string; match: string }[];
+}): Promise<void> {
+  const run = async () => {
+    await ensurePlannerTab();
+    const api = sheets();
+    const res = await api.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: PLANNER_RANGE,
+    });
+    const rows = (res.data.values as string[][] | undefined) ?? [];
+    const partLabel = args.partNo === 0 ? "All" : `Part ${args.partNo}`;
+    const owned = (r: string[]) => {
+      const id = text(r[6]) ?? promoJoinKey(String(r[0] ?? ""), String(r[1] ?? ""));
+      const part = text(r[2]);
+      const pNo = !part || /^all$/i.test(part) ? 0 : Number(part.replace(/\D/g, "")) || 0;
+      return id === args.promoId && pNo === args.partNo;
+    };
+
+    const clears: number[] = [];
+    const updates: { row: number; values: string[] }[] = [];
+    const appends: string[][] = [];
+
+    for (const slot of args.slots) {
+      const re = new RegExp(slot.match, "i");
+      const hits: number[] = [];
+      for (let i = 1; i < rows.length; i++) {
+        if (!owned(rows[i])) continue;
+        if (re.test(String(rows[i][4] ?? ""))) hits.push(i);
+      }
+      const values = [
+        args.showName,
+        args.promoName,
+        partLabel,
+        slot.date,
+        slot.label,
+        args.updatedAt,
+        args.promoId,
+      ];
+      if (!slot.date.trim()) {
+        clears.push(...hits);
+        continue;
+      }
+      if (hits.length === 0) appends.push(values);
+      else {
+        updates.push({ row: hits[0], values });
+        clears.push(...hits.slice(1));
+        rows[hits[0]] = values;
+      }
+    }
+
+    if (updates.length) {
+      await api.spreadsheets.values.batchUpdate({
+        spreadsheetId: SHEET_ID,
+        requestBody: {
+          valueInputOption: "RAW",
+          data: updates.map((u) => ({
+            range: `'${PLANNER_TAB}'!A${u.row + 1}:G${u.row + 1}`,
+            values: [u.values],
+          })),
+        },
+      });
+    }
+    if (clears.length) {
+      await api.spreadsheets.values.batchClear({
+        spreadsheetId: SHEET_ID,
+        requestBody: {
+          ranges: clears.map((i) => `'${PLANNER_TAB}'!A${i + 1}:G${i + 1}`),
+        },
+      });
+    }
+    if (appends.length) {
+      await api.spreadsheets.values.append({
+        spreadsheetId: SHEET_ID,
+        range: `'${PLANNER_TAB}'!A1:G1`,
+        valueInputOption: "RAW",
+        insertDataOption: "INSERT_ROWS",
+        requestBody: { values: appends },
+      });
+    }
+  };
+  const next = chain.then(run, run);
+  chain = next.catch(() => undefined);
+  return next as Promise<void>;
+}
+
 export const REMARKS_TAB = "Remarks";
 const REMARKS_HEADER = ["Show_Name", "Promo Name", "Part", "Remark", "At", "Promo ID"];
 export const REMARKS_RANGE = `'${REMARKS_TAB}'!A:F`;

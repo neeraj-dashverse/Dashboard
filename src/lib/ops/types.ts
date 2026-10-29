@@ -315,6 +315,15 @@ export type OpsAction =
       showName?: string;
       promoName?: string;
     }
+  /** Write every plan date for one part in a single sheet update. */
+  | {
+      type: "record_plan_part";
+      promoId: string;
+      partNo: number;
+      showName?: string;
+      promoName?: string;
+      slots: { label: string; date: string; match: string }[];
+    }
   /** Append one remark. Stored as its own row on the Remarks tab. */
   | {
       type: "append_plan_remark";
