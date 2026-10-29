@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import {
   artistName,
+  assetClosedDate,
   dayLanes,
+  formatDmy,
   isHoliday,
   plannerDays,
   plannerPreprodRows,
   plannerRows,
-  formatDmy,
+  STAGE_LABEL,
   type DayLane,
   type PlannerRow,
   type PlannerTab,
@@ -98,20 +100,48 @@ function addDays(iso: string, n: number): string {
 }
 
 const DAY_COL = "min-w-[150px] w-[150px]";
-const W_PROD = { show: 120, promo: 140, part: 44, artist: 110, editor: 110 };
-const W_ASSET = { show: 180, promo: 140, people: 150 };
+const W_PROD = { show: 112, promo: 128, part: 44, artist: 100, editor: 100, status: 148 };
+const W_ASSET = { show: 160, promo: 128, people: 130, status: 148 };
 const LEFT_PROD = {
   show: 0,
   promo: W_PROD.show,
   part: W_PROD.show + W_PROD.promo,
   artist: W_PROD.show + W_PROD.promo + W_PROD.part,
   editor: W_PROD.show + W_PROD.promo + W_PROD.part + W_PROD.artist,
+  status: W_PROD.show + W_PROD.promo + W_PROD.part + W_PROD.artist + W_PROD.editor,
 };
 const LEFT_ASSET = {
   show: 0,
   promo: W_ASSET.show,
   people: W_ASSET.show + W_ASSET.promo,
+  status: W_ASSET.show + W_ASSET.promo + W_ASSET.people,
 };
+
+function nextPlanned(row: PlannerRow, today: string): { label: string; date: string } | null {
+  const upcoming = [...row.planMarks]
+    .filter((m) => m.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const pick = upcoming[0] ?? [...row.planMarks].sort((a, b) => b.date.localeCompare(a.date))[0];
+  if (pick) return { label: plannedLabel(pick.note), date: pick.date };
+  if (row.plannedDate) {
+    return {
+      label: row.partNo === 0 ? "Planned Assets" : "Planned Rough cut",
+      date: row.plannedDate,
+    };
+  }
+  return null;
+}
+
+function currentStatus(row: PlannerRow, today: string, tab: PlannerTab): string {
+  const now = dayLanes(row, today, today, tab);
+  if (now[0]?.label) return now[0].label;
+  if (tab === "preprod") {
+    if (assetClosedDate(row.promo)) return "Assets closed";
+    return row.promo.assetTeam?.assetsStatus?.trim() || "Assets open";
+  }
+  if (row.part) return STAGE_LABEL[row.part.stage] ?? row.part.stage;
+  return "—";
+}
 
 export function PlannerBoard() {
   const { snap } = useOps();
@@ -364,7 +394,7 @@ function Grid({
             {isAsset ? (
               <th
                 style={{ left: LEFT_ASSET.people, width: W_ASSET.people, minWidth: W_ASSET.people }}
-                className={`${head} border-r border-r-white/[0.08]`}
+                className={head}
               >
                 Asset artists
               </th>
@@ -384,12 +414,22 @@ function Grid({
                 </th>
                 <th
                   style={{ left: LEFT_PROD.editor, width: W_PROD.editor, minWidth: W_PROD.editor }}
-                  className={`${head} border-r border-r-white/[0.08]`}
+                  className={head}
                 >
                   Editor
                 </th>
               </>
             )}
+            <th
+              style={{
+                left: isAsset ? LEFT_ASSET.status : LEFT_PROD.status,
+                width: isAsset ? W_ASSET.status : W_PROD.status,
+                minWidth: isAsset ? W_ASSET.status : W_PROD.status,
+              }}
+              className={`${head} border-r border-r-white/[0.08]`}
+            >
+              Planned / Current
+            </th>
             {days.map((d) => {
               const f = fmtDay(d);
               const today = d === snapToday;
@@ -466,7 +506,7 @@ function Grid({
                       width: W_ASSET.people,
                       minWidth: W_ASSET.people,
                     }}
-                    className={`${stick} border-r border-r-white/[0.08]`}
+                    className={stick}
                   >
                     <p className="truncate text-[11px] text-slate-300">{artist ?? "—"}</p>
                     {editor && <p className="truncate text-[10px] text-slate-500">{editor}</p>}
@@ -510,7 +550,7 @@ function Grid({
                         width: W_PROD.editor,
                         minWidth: W_PROD.editor,
                       }}
-                      className={`${stick} border-r border-r-white/[0.08]`}
+                      className={stick}
                     >
                       <p className="truncate text-[11px] text-slate-300" title={editor ?? undefined}>
                         {editor ?? "—"}
@@ -518,11 +558,38 @@ function Grid({
                     </td>
                   </>
                 )}
+                <td
+                  style={{
+                    left: isAsset ? LEFT_ASSET.status : LEFT_PROD.status,
+                    width: isAsset ? W_ASSET.status : W_PROD.status,
+                    minWidth: isAsset ? W_ASSET.status : W_PROD.status,
+                  }}
+                  className={`${stick} border-r border-r-white/[0.08]`}
+                >
+                  {(() => {
+                    const planned = nextPlanned(r, snapToday);
+                    const current = currentStatus(r, snapToday, tab);
+                    return (
+                      <div className="space-y-1">
+                        <p className="truncate text-[10px] font-semibold text-amber-100/90" title={planned ? `${planned.label} · ${formatDmy(planned.date)}` : undefined}>
+                          {planned ? planned.label : "No plan"}
+                        </p>
+                        {planned && (
+                          <p className="truncate text-[10px] text-slate-500">{formatDmy(planned.date)}</p>
+                        )}
+                        <p className="truncate text-[11px] font-semibold text-slate-200" title={current}>
+                          {current}
+                        </p>
+                      </div>
+                    );
+                  })()}
+                </td>
                 {days.map((d) => {
                   const holiday = isHoliday(d);
                   const lanes = dayLanes(r, d, snapToday, tab).filter(
                     (l) => !holiday || l.closed
                   );
+                  const planned = r.planMarks.filter((m) => m.date === d);
                   const delayed =
                     !!r.plannedDate &&
                     d > r.plannedDate &&
@@ -540,10 +607,9 @@ function Grid({
                               : ""
                       }`}
                     >
-                      <div className="min-h-[34px] space-y-1">
-                        {r.planMarks
-                          .filter((m) => m.date === d)
-                          .map((m) => (
+                      <div className="flex min-h-[48px] flex-col justify-between gap-1">
+                        <div className="space-y-1">
+                          {planned.map((m) => (
                             <div
                               key={m.note}
                               className={`rounded border border-dashed border-white/40 px-1.5 py-0.5 text-[10px] font-semibold leading-tight ${plannedChipClass(m.note)}`}
@@ -551,11 +617,10 @@ function Grid({
                               {plannedLabel(m.note)}
                             </div>
                           ))}
-                        {lanes
-                          .filter(
-                            (l) => !r.planMarks.some((m) => m.date === d && m.note.startsWith(l.label))
-                          )
-                          .map(laneChip)}
+                        </div>
+                        <div className="space-y-1">
+                          {lanes.map(laneChip)}
+                        </div>
                       </div>
                     </td>
                   );

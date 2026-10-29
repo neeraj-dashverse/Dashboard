@@ -731,19 +731,32 @@ export function dayLanes(
   return [{ ...prod, timing: vsPlan(row.plannedDate, row.part.aniCloseDate, today) }];
 }
 
-/** Dates that should pull the calendar window open for this row. */
-function occupancyDates(row: PlannerRow, today: string): string[] {
+/** First day this row's phase actually began. Pre-prod is asset start; production is plotting or ani start. */
+function phaseStartDate(row: PlannerRow, tab: PlannerTab, today: string): string | null {
+  if (tab === "preprod") return assetStartDate(row.promo, today);
+  return animationStartDate(row.part);
+}
+
+/** Dates that should pull the calendar window open for this row, on this tab only. */
+function occupancyDates(row: PlannerRow, today: string, tab: PlannerTab): string[] {
   const dates: string[] = [];
   const push = (d: string | null | undefined) => {
     if (d) dates.push(d);
   };
-  push(assetStartDate(row.promo, today));
-  push(toIsoLoose(row.promo.assetTeam?.endDate));
-  push(toIsoLoose(row.promo.assetTeam?.correctionsStartDate));
-  push(assetClosedDate(row.promo));
-  push(row.promo.preProd?.plannedDate);
   push(row.plannedDate);
   for (const m of row.planMarks) push(m.date);
+
+  if (tab === "preprod") {
+    push(assetStartDate(row.promo, today));
+    push(toIsoLoose(row.promo.assetTeam?.endDate));
+    push(toIsoLoose(row.promo.assetTeam?.correctionsStartDate));
+    push(assetClosedDate(row.promo));
+    push(row.promo.preProd?.plannedDate);
+    if (assetStartDate(row.promo, today) && !assetClosedDate(row.promo)) push(today);
+    return dates;
+  }
+
+  push(animationStartDate(row.part));
   const p = row.part;
   if (p) {
     push(p.deadline);
@@ -799,21 +812,33 @@ function enumerateDays(start: string, end: string): string[] {
   return out;
 }
 
-/** Date columns for one tab, from the first real start on that set through the last date. */
+/**
+ * Date columns for one tab. The left edge is the earliest start of that phase
+ * (asset start on Pre-production, plotting / ani start on Production), then
+ * through the last date still on that tab.
+ */
 export function plannerDays(snap: OpsSnapshot, tab: PlannerTab): string[] {
   const rows = tab === "preprod" ? plannerPreprodRows(snap) : plannerRows(snap);
   const dates = new Set<string>();
+  const starts: string[] = [];
   for (const r of rows) {
-    for (const d of occupancyDates(r, snap.today)) dates.add(d);
+    const started = phaseStartDate(r, tab, snap.today);
+    if (started) starts.push(started);
+    for (const d of occupancyDates(r, snap.today, tab)) dates.add(d);
   }
   for (const c of snap.plannerCells) {
     if (rows.some((r) => r.promo.id === c.promoId && r.partNo === c.partNo)) dates.add(c.date);
   }
-  if (dates.size === 0) return enumerateDays(snap.today, addDaysIso(snap.today, 14));
+  if (dates.size === 0 && starts.length === 0) {
+    return enumerateDays(snap.today, addDaysIso(snap.today, 14));
+  }
   const sorted = [...dates].sort();
-  let end = sorted[sorted.length - 1];
-  if (end < snap.today) end = snap.today;
-  return enumerateDays(sorted[0], addDaysIso(end, 1));
+  const start = [...starts].sort()[0] ?? sorted[0] ?? snap.today;
+  const afterStart = sorted.filter((d) => d >= start);
+  let end = afterStart[afterStart.length - 1] ?? start;
+  if (snap.today > end && snap.today >= start) end = snap.today;
+  if (end < start) end = start;
+  return enumerateDays(start, addDaysIso(end, 1));
 }
 
 const STALE_DAYS = 2;
