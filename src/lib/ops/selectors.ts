@@ -84,6 +84,8 @@ export type PromoPartRecord = {
   /** Worked time from column AF, when the sheet has it. */
   workedSec: number | null;
   days: number | null;
+  /** Sound close, else the last stage date on the part. */
+  closedOn: string | null;
 };
 
 export type PromoRecord = {
@@ -98,6 +100,8 @@ export type PromoRecord = {
   assetPeople: string;
   assetDays: number | null;
   days: number | null;
+  /** When the promo was closed. Empty while it is still open. */
+  closedOn: string | null;
   parts: PromoPartRecord[];
 };
 
@@ -134,20 +138,22 @@ export function promoRecords(snap: OpsSnapshot): PromoRecord[] {
       asset?.productionDays ??
       daySpan(asset?.startDate, asset?.correctionsEndDate || asset?.endDate);
 
-    const partRows: PromoPartRecord[] = parts.map((part) => ({
-      partNo: part.partNo,
-      artist: part.artist?.trim() || "—",
-      editor: part.editors?.trim() || "—",
-      stage: STAGE_LABEL[part.stage] ?? part.stage,
-      lengthSec: part.durationSec,
-      workedSec: part.workedDurationSec,
-      days:
-        part.days ??
-        daySpan(
-          part.aniStartDate ?? part.plannedPlottedDate,
-          part.soundEndDate ?? part.correctionEndDate ?? part.editCloseDate ?? part.aniCloseDate
-        ),
-    }));
+    const partRows: PromoPartRecord[] = parts.map((part) => {
+      const closedOn =
+        part.soundEndDate ?? part.correctionEndDate ?? part.editCloseDate ?? part.aniCloseDate;
+      return {
+        partNo: part.partNo,
+        artist: part.artist?.trim() || "—",
+        editor: part.editors?.trim() || "—",
+        stage: STAGE_LABEL[part.stage] ?? part.stage,
+        lengthSec: part.durationSec,
+        workedSec: part.workedDurationSec,
+        days:
+          part.days ??
+          daySpan(part.aniStartDate ?? part.plannedPlottedDate, closedOn),
+        closedOn,
+      };
+    });
 
     const lengths = partRows.map((part) => part.lengthSec).filter((seconds) => seconds > 0);
     const starts = parts
@@ -159,24 +165,40 @@ export function promoRecords(snap: OpsSnapshot): PromoRecord[] {
       .filter((date): date is string => !!date)
       .sort();
     const delivered = parts.length > 0 && parts.every((part) => part.stage === "delivered");
+    const status =
+      promo?.trackerStatus || promo?.status || (delivered ? "Delivered" : parts.length ? "WIP" : "—");
+    const partCloses = partRows
+      .map((part) => part.closedOn)
+      .filter((date): date is string => !!date)
+      .sort();
+    const wrapped = delivered || /closed|delivered/i.test(status);
+    const closedOn = wrapped
+      ? partCloses[partCloses.length - 1] ??
+        toIsoLoose(promo?.preProd?.closedDate) ??
+        (promo ? assetClosedDate(promo) : null)
+      : null;
 
     records.push({
       id,
       showName: promo?.showName || showFallback || "—",
       promoName: promo?.promoName || nameFallback || "—",
-      status: promo?.trackerStatus || promo?.status || (delivered ? "Delivered" : parts.length ? "WIP" : "—"),
+      status,
       initialSec: promo?.initialDurationSec ?? null,
       finalSec: lengths.length ? lengths.reduce((sum, seconds) => sum + seconds, 0) : null,
       assetPeople,
       assetDays,
       days: daySpan(starts[0], ends[ends.length - 1]) ?? assetDays,
+      closedOn,
       parts: partRows,
     });
   }
 
-  return records.sort(
-    (a, b) => a.showName.localeCompare(b.showName) || a.promoName.localeCompare(b.promoName)
-  );
+  return records.sort((a, b) => {
+    if (a.closedOn && b.closedOn) return b.closedOn.localeCompare(a.closedOn);
+    if (a.closedOn) return -1;
+    if (b.closedOn) return 1;
+    return a.showName.localeCompare(b.showName) || a.promoName.localeCompare(b.promoName);
+  });
 }
 
 export function partLabel(snap: OpsSnapshot, part: Part): string {
