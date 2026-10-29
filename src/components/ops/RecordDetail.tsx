@@ -110,14 +110,18 @@ export function RecordDetail({ promoId }: { promoId: string }) {
       </div>
       <SyncStrip />
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Stat label="Initial" value={duration(promo?.initialDurationSec) || "—"} />
-        <Stat label="Final" value={duration(promo?.finalAssetLengthSec) || sumLength(parts) || "—"} />
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Stat label="Initial from parts" value={sumLength(parts) || "—"} />
         <Stat label="Parts" value={String(parts.length || "—")} />
         <Stat
-          label="Assets"
+          label="Pre-production"
           value={asset?.totalDays != null ? `${asset.totalDays} days` : pre?.status || "—"}
         />
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <FileLink label="Final render" href={promo?.finalRendersLink} />
+        <FileLink label="Project files" href={promo?.projectFilesLink} />
       </div>
 
       {links.length > 0 && (
@@ -222,6 +226,28 @@ export function RecordDetail({ promoId }: { promoId: string }) {
   );
 }
 
+function FileLink({ label, href }: { label: string; href: string | null | undefined }) {
+  if (href && /^https?:\/\//i.test(href)) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        className="rounded-xl border border-[#4361ee]/40 bg-[#4361ee]/15 px-4 py-3 text-[14px] font-bold text-white hover:bg-[#4361ee]/25"
+      >
+        {label}
+        <span className="mt-1 block text-[11px] font-medium text-[#c5d0ff]">PocketFM sheet</span>
+      </a>
+    );
+  }
+  return (
+    <div className="rounded-xl border border-white/[0.08] bg-[#121216] px-4 py-3 text-[14px] font-bold text-slate-500">
+      {label}
+      <span className="mt-1 block text-[11px] font-medium text-slate-600">Not on the PocketFM sheet</span>
+    </div>
+  );
+}
+
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-white/[0.08] bg-[#121216] px-3 py-3">
@@ -312,8 +338,6 @@ function uniqueLinks(promo: Promo | undefined) {
   const asset = promo.assetTeam;
   const candidates = [
     ["Krock 5 min", promo.krockLink5Min],
-    ["Final renders", promo.finalRendersLink],
-    ["Project files", promo.projectFilesLink],
     ["Final files", promo.finalCorrectedFiles],
     ["Assets", promo.assetsLink],
     ["Asset map", asset?.assetMapLink],

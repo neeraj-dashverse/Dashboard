@@ -93,10 +93,12 @@ export type PromoRecord = {
   showName: string;
   promoName: string;
   status: string;
-  /** Master Tracker initial duration. */
+  /** Sum of the part lengths on Production Tracker. */
   initialSec: number | null;
-  /** Sum of part lengths. */
+  /** Final asset length on the PocketFM sheet, when that cell is filled. */
   finalSec: number | null;
+  finalRendersLink: string | null;
+  projectFilesLink: string | null;
   assetPeople: string;
   assetDays: number | null;
   days: number | null;
@@ -183,10 +185,10 @@ export function promoRecords(snap: OpsSnapshot): PromoRecord[] {
       showName: promo?.showName || showFallback || "—",
       promoName: promo?.promoName || nameFallback || "—",
       status,
-      initialSec: promo?.initialDurationSec ?? null,
-      finalSec: lengths.length
-        ? lengths.reduce((sum, seconds) => sum + seconds, 0)
-        : promo?.finalAssetLengthSec ?? null,
+      initialSec: lengths.length ? lengths.reduce((sum, seconds) => sum + seconds, 0) : null,
+      finalSec: promo?.finalAssetLengthSec ?? null,
+      finalRendersLink: promo?.finalRendersLink ?? null,
+      projectFilesLink: promo?.projectFilesLink ?? null,
       assetPeople,
       assetDays,
       days: daySpan(starts[0], ends[ends.length - 1]) ?? assetDays,
@@ -239,10 +241,12 @@ function collapsePromoRecords(records: PromoRecord[]): PromoRecord[] {
       id: primary.id.split("#")[0],
       parts: partList,
       closedOn,
-      finalSec: lengths.length
-        ? lengths.reduce((sum, seconds) => sum + seconds, 0)
-        : primary.finalSec,
-      initialSec: group.find((record) => record.initialSec)?.initialSec ?? primary.initialSec,
+      initialSec: lengths.length ? lengths.reduce((sum, seconds) => sum + seconds, 0) : null,
+      finalSec: group.find((record) => record.finalSec)?.finalSec ?? primary.finalSec,
+      finalRendersLink:
+        group.find((record) => record.finalRendersLink)?.finalRendersLink ?? primary.finalRendersLink,
+      projectFilesLink:
+        group.find((record) => record.projectFilesLink)?.projectFilesLink ?? primary.projectFilesLink,
       assetPeople: group.find((record) => record.assetPeople)?.assetPeople ?? primary.assetPeople,
       assetDays: group.find((record) => record.assetDays != null)?.assetDays ?? primary.assetDays,
     };

@@ -20,6 +20,7 @@ import {
   matchAsset,
   parseAssets,
   applyMasterDetail,
+  matchMasterDetail,
   parseMasterDetails,
   parseParts,
   parsePreProd,
@@ -216,7 +217,7 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
 
   const masterDetails = parseMasterDetails(masterBook[masterRange] ?? []);
   for (const promo of promos) {
-    const detail = masterDetails.get(promo.id.split("#")[0]);
+    const detail = matchMasterDetail(promo, masterDetails);
     if (detail) applyMasterDetail(promo, detail);
   }
 

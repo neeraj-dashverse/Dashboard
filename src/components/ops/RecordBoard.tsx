@@ -74,8 +74,13 @@ export function RecordBoard() {
               </p>
               <p className="mt-1 text-[11px] text-slate-500">
                 {record.days != null ? `${record.days} days` : "Days —"}
+                {" · Initial "}
+                {duration(record.initialSec)}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-400">
+                {record.finalRendersLink ? "Final render" : "No final render"}
                 {" · "}
-                {duration(record.initialSec)} → {duration(record.finalSec)}
+                {record.projectFilesLink ? "Project files" : "No project files"}
               </p>
             </Link>
           );

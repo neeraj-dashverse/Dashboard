@@ -136,6 +136,9 @@ export function parseMasterDetails(rows: Grid): Map<string, Partial<Promo>> {
     if (!id || id === "|") continue;
     const pay = text(r[32]);
     map.set(id, {
+      showName: showName ?? "",
+      scriptName: scriptName ?? "",
+      promoName: scriptName ?? "",
       finalAssetLengthSec: durationToSec(r[2]),
       masterStage: text(r[6]),
       canvasCompletionTimeline: toIsoDate(r[7]),
@@ -165,6 +168,23 @@ export function parseMasterDetails(rows: Grid): Map<string, Partial<Promo>> {
   return map;
 }
 
+/** PocketFM Master Sheet row for this promo, including a close name match. */
+export function matchMasterDetail(
+  promo: Promo,
+  details: Map<string, Partial<Promo>>
+): Partial<Promo> | null {
+  const exact = details.get(promo.id.split("#")[0]);
+  if (exact) return exact;
+  const showKey = normKey(promo.showName).replace(/\s+animation$/, "");
+  const promoKey = normKey(promo.promoName);
+  const rows = [...details.values()].filter((row) => {
+    const show = normKey(row.showName ?? "").replace(/\s+animation$/, "");
+    return show === showKey || show.startsWith(showKey) || showKey.startsWith(show);
+  });
+  const named = rows.find((row) => normKey(row.promoName ?? row.scriptName ?? "") === promoKey);
+  return named ?? rows[0] ?? null;
+}
+
 /** Fill empty promo link fields from the Master Sheet. Does not replace tracker status. */
 export function applyMasterDetail(promo: Promo, detail: Partial<Promo>) {
   const fill = <K extends keyof Promo>(key: K) => {
@@ -176,6 +196,8 @@ export function applyMasterDetail(promo: Promo, detail: Partial<Promo>) {
     }
   };
   if (detail.finalAssetLengthSec) promo.finalAssetLengthSec = detail.finalAssetLengthSec;
+  if (detail.finalRendersLink) promo.finalRendersLink = detail.finalRendersLink;
+  if (detail.projectFilesLink) promo.projectFilesLink = detail.projectFilesLink;
   fill("masterStage");
   fill("canvasCompletionTimeline");
   fill("canvasStatus");
