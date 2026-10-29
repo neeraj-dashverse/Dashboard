@@ -2,20 +2,29 @@
 
 import Link from "next/link";
 import {
-  animatorLoads,
   assetDeadlinesToPush,
-  formatDuration,
+  formatDmy,
   promoFor,
+  teamAvailability,
+  type TeamPerson,
 } from "@/lib/ops/selectors";
-import { Kpi, SectionTitle, StagePill } from "./ui";
+import { Kpi, SectionTitle } from "./ui";
 import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
 
+function whenFree(person: TeamPerson, today: string): string {
+  if (person.free) return "Free now";
+  if (!person.freeAt) return "No plan date";
+  if (person.freeAt < today) return `Still on it · plan was ${formatDmy(person.freeAt)}`;
+  if (person.freeAt === today) return "Free today";
+  return formatDmy(person.freeAt);
+}
+
 export function TeamBoard() {
   const { snap, act, busy } = useOps();
-  const loads = animatorLoads(snap);
-  const free = loads.filter((a) => a.free).length;
-  const agency = loads.filter((a) => a.team === "agency").length;
+  const people = teamAvailability(snap);
+  const free = people.filter((p) => p.free).length;
+  const unplanned = people.filter((p) => !p.free && !p.freeAt).length;
   const deadlines = assetDeadlinesToPush(snap);
   const reviewsWithWeak = snap.qualityReviews.filter(
     (r) => r.animation?.weakAreas || r.editing?.remark || r.animation?.remark
@@ -26,23 +35,23 @@ export function TeamBoard() {
       <div>
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Team</p>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">
-          Capacity & <span className="gradient-text">productivity</span>
+          Who is <span className="gradient-text">free</span>
         </h1>
         <p className="mt-1 text-[12px] text-slate-500">
-          Live roster from Production Tracker · quality from CPS rubric (Master Productivity)
+          From the calendar and plan dates. Free now means no open row. Free on is the latest plan date on the work they still have.
         </p>
       </div>
 
       <SyncStrip />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        <Kpi label="Animators" value={loads.length} />
+        <Kpi label="People" value={people.length} />
         <Kpi label="Free now" value={free} tone="text-emerald-300" />
-        <Kpi label="Agency" value={agency} tone="text-purple-300" />
+        <Kpi label="Busy" value={people.length - free} tone="text-slate-200" />
         <Kpi
-          label="Quality reviews"
-          value={snap.qualityReviews.length}
-          tone="text-[#9bb0ff]"
+          label="No plan date"
+          value={unplanned}
+          tone={unplanned ? "text-amber-300" : "text-white"}
         />
         <Kpi
           label="Asset deadlines to push"
@@ -104,139 +113,61 @@ export function TeamBoard() {
 
       <section className="space-y-2">
         <SectionTitle
-          title="Animator board"
-          hint="Throughput = Σ day midpoints / all active days (incl. correction) · Quality = Cps rubric · flow anim→edit→correction→sound"
+          title="Free and when"
+          hint="Open calendar rows only. The date is the latest plan mark on that work."
         />
         <div className="overflow-hidden rounded-xl border border-white/[0.08]">
           <table className="w-full text-left text-[13px]">
             <thead className="bg-white/[0.03] text-[10px] uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-4 py-3 font-semibold">Artist</th>
-                <th className="px-4 py-3 font-semibold">As Cps</th>
-                <th className="px-4 py-3 font-semibold">As Part 1</th>
-                <th className="px-4 py-3 text-right font-semibold">Load</th>
-                <th className="px-4 py-3 text-right font-semibold">Free at</th>
-                <th className="px-4 py-3 text-right font-semibold">Throughput</th>
-                <th className="px-4 py-3 text-right font-semibold">Quality</th>
-                <th className="px-4 py-3 font-semibold">Part work</th>
+                <th className="px-4 py-3 font-semibold">Person</th>
+                <th className="px-4 py-3 font-semibold">Role</th>
+                <th className="px-4 py-3 font-semibold">Free on</th>
+                <th className="px-4 py-3 font-semibold">Holding</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.05]">
-              {loads.map((a) => (
-                <tr key={a.id} className="hover:bg-white/[0.02]">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-white">{a.name}</p>
-                    <p className="text-[11px] text-slate-500">
-                      {a.team === "agency" ? "Agency" : "In-house"}
-                      {a.free ? " · Free" : ""}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3 text-[11px] text-slate-300">
-                    {a.asCps.length === 0
-                      ? "—"
-                      : a.asCps.map((p) => (
-                          <Link
-                            key={p.id}
-                            href={`/promo/${p.id}`}
-                            className="block truncate hover:text-white"
-                          >
-                            {p.showName} · {p.scriptName}
-                          </Link>
-                        ))}
-                  </td>
-                  <td className="px-4 py-3 text-[11px] text-slate-300">
-                    {a.asPart1.length === 0
-                      ? "—"
-                      : a.asPart1.map((p) => (
-                          <Link
-                            key={p.id}
-                            href={`/promo/${p.id}`}
-                            className="block truncate hover:text-white"
-                            title="First 5‑min = Part 1 work"
-                          >
-                            {p.showName} · {p.scriptName}
-                          </Link>
-                        ))}
-                  </td>
-                  <td
-                    className={`px-4 py-3 text-right tabular-nums font-semibold ${
-                      a.free ? "text-emerald-300" : "text-slate-200"
-                    }`}
-                  >
-                    {a.free ? "Free" : `${a.openMinutes.toFixed(0)}m`}
-                  </td>
-                  <td
-                    className={`px-4 py-3 text-right tabular-nums text-[12px] ${
-                      a.free ? "text-emerald-300" : "text-[#9bb0ff]"
-                    }`}
-                  >
-                    {a.freeAt}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {a.throughputMinPerDay == null ? (
-                      <span className="text-slate-600">—</span>
-                    ) : (
-                      <span
-                        className="tabular-nums font-semibold text-slate-200"
-                        title={`${a.outputMinutesLogged}m over ${a.activeDays} active day(s)${
-                          a.correctionDays
-                            ? ` · includes ${a.correctionDays} correction day(s)`
-                            : ""
-                        }`}
-                      >
-                        {a.throughputMinPerDay}
-                        <span className="ml-0.5 text-[10px] font-normal text-slate-500">
-                          m/d
-                        </span>
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {a.qualityAvg == null ? (
-                      <span className="text-slate-600">—</span>
-                    ) : (
-                      <span
-                        className={`tabular-nums font-semibold ${
-                          a.qualityAvg >= 4
-                            ? "text-emerald-300"
-                            : a.qualityAvg >= 3
-                              ? "text-amber-300"
-                              : "text-rose-300"
-                        }`}
-                        title={`${a.qualityReviews} CPS review(s)`}
-                      >
-                        {a.qualityAvg}
-                        <span className="ml-0.5 text-[10px] font-normal text-slate-500">
-                          /5
-                        </span>
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {a.openParts.length === 0 ? (
-                      <span className="text-slate-600">—</span>
-                    ) : (
-                      <div className="flex flex-col gap-1">
-                        {a.openParts.slice(0, 3).map((p) => {
-                          const promo = promoFor(snap, p.promoId);
-                          return (
+              {people.map((person) => {
+                const label = whenFree(person, snap.today);
+                return (
+                  <tr key={person.name} className="hover:bg-white/[0.02]">
+                    <td className="px-4 py-3 font-medium text-white">{person.name}</td>
+                    <td className="px-4 py-3 text-[11px] text-slate-400">{person.roles.join(" · ")}</td>
+                    <td
+                      className={`px-4 py-3 text-[12px] font-semibold ${
+                        person.free
+                          ? "text-emerald-300"
+                          : !person.freeAt || person.freeAt < snap.today
+                            ? "text-amber-200"
+                            : "text-[#9bb0ff]"
+                      }`}
+                    >
+                      {label}
+                    </td>
+                    <td className="px-4 py-3">
+                      {person.holds.length === 0 ? (
+                        <span className="text-slate-600">—</span>
+                      ) : (
+                        <div className="flex flex-col gap-1">
+                          {person.holds.slice(0, 3).map((hold) => (
                             <Link
-                              key={p.id}
-                              href={`/promo/${p.promoId}`}
-                              className="flex items-center gap-2 text-[11px] text-slate-300 hover:text-white"
+                              key={hold.label}
+                              href={`/plan/${encodeURIComponent(hold.promoId)}`}
+                              className="truncate text-[11px] text-slate-300 hover:text-white"
+                              title={hold.label}
                             >
-                              <StagePill stage={p.stage} />
-                              <span className="truncate">
-                                {promo?.showName} · P{p.partNo} · {formatDuration(p.durationSec)}
-                              </span>
+                              {hold.label}
                             </Link>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                          ))}
+                          {person.holds.length > 3 && (
+                            <p className="text-[11px] text-slate-500">+{person.holds.length - 3} more</p>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

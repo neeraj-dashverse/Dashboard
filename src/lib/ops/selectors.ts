@@ -550,6 +550,125 @@ export function isAssetOpen(promo: Promo): boolean {
   return true;
 }
 
+export type TeamHold = {
+  promoId: string;
+  label: string;
+  /** Latest plan date on this row. Null when the calendar row has no plan. */
+  until: string | null;
+};
+
+export type TeamPerson = {
+  name: string;
+  roles: Array<"Animator" | "Editor" | "Assets">;
+  /** No open calendar row. */
+  free: boolean;
+  /**
+   * When their open calendar work is planned to finish.
+   * Today when already free. Null when they are busy and a job has no plan date.
+   */
+  freeAt: string | null;
+  holds: TeamHold[];
+};
+
+function personKey(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+function splitPersonNames(v: string | null | undefined): string[] {
+  return String(v ?? "")
+    .split(/[,/]|&| and /i)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && !/^(tbd|n\/a|na|nil|none|-)$/i.test(s));
+}
+
+/** Latest planned mark on the row, else the row's planned date. */
+function rowRelease(row: PlannerRow): { until: string | null; plan: string } {
+  const marks = [...row.planMarks].sort((a, b) => a.date.localeCompare(b.date));
+  const last = marks[marks.length - 1];
+  if (last) return { until: last.date, plan: last.note };
+  if (row.plannedDate) return { until: row.plannedDate, plan: "Plan" };
+  return { until: null, plan: "No plan date" };
+}
+
+/**
+ * Who is free, and when they will be free, from the calendar and plan dates.
+ * Animators on the roster with no open row are free now. A busy person is free
+ * on the latest plan date across the rows they are still on.
+ */
+export function teamAvailability(snap: OpsSnapshot): TeamPerson[] {
+  const map = new Map<string, TeamPerson>();
+
+  const ensure = (raw: string, role: TeamPerson["roles"][number]): TeamPerson | null => {
+    const name = raw.trim();
+    const key = personKey(name);
+    if (!key || key.startsWith("a:")) return null;
+    let person = map.get(key);
+    if (!person) {
+      person = { name, roles: [], free: true, freeAt: snap.today, holds: [] };
+      map.set(key, person);
+    }
+    if (!person.roles.includes(role)) person.roles.push(role);
+    return person;
+  };
+
+  const addHold = (
+    raw: string,
+    role: TeamPerson["roles"][number],
+    row: PlannerRow,
+    what: string
+  ) => {
+    const person = ensure(raw, role);
+    if (!person) return;
+    const rel = rowRelease(row);
+    const label = `${what} · ${rel.plan}`;
+    if (person.holds.some((h) => h.label === label)) return;
+    person.holds.push({ promoId: row.promo.id, label, until: rel.until });
+  };
+
+  for (const animator of snap.animators) ensure(animator.name, "Animator");
+
+  for (const row of plannerRows(snap)) {
+    const what = `${row.promo.showName || "—"} · ${row.promo.promoName || "—"} · P${row.partNo}`;
+    const artists = splitPersonNames(row.part?.artist);
+    if (artists.length === 0 && row.part) {
+      for (const credit of row.part.artists) {
+        const named = artistName(snap, credit.artistId);
+        if (named) artists.push(named);
+      }
+    }
+    for (const name of artists) addHold(name, "Animator", row, what);
+    for (const name of splitPersonNames(row.part?.editors)) addHold(name, "Editor", row, what);
+  }
+
+  for (const row of plannerPreprodRows(snap)) {
+    const what = `${row.promo.showName || "—"} · ${row.promo.promoName || "—"}`;
+    const team = row.promo.assetTeam;
+    const names = [team?.artist1, team?.artist2, team?.artist3, team?.artLead].flatMap((n) =>
+      splitPersonNames(n)
+    );
+    for (const name of names) addHold(name, "Assets", row, what);
+  }
+
+  for (const person of map.values()) {
+    if (person.holds.length === 0) {
+      person.free = true;
+      person.freeAt = snap.today;
+      continue;
+    }
+    person.free = false;
+    const dates = person.holds.map((h) => h.until).filter((d): d is string => !!d);
+    person.freeAt = dates.length === person.holds.length ? dates.sort().at(-1) ?? null : null;
+  }
+
+  return [...map.values()].sort((a, b) => {
+    if (a.free !== b.free) return a.free ? -1 : 1;
+    if (a.freeAt && b.freeAt) return a.freeAt.localeCompare(b.freeAt);
+    if (a.freeAt) return -1;
+    if (b.freeAt) return 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 /** One row per OPEN asset-sheet promo — not Master Tracker closed runs. */
 export function plannerPreprodRows(snap: OpsSnapshot): PlannerRow[] {
   const seen = new Set<string>();
