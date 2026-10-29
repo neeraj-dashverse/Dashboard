@@ -42,7 +42,8 @@ function stuckStage(group: TeamGroupId, doing: string): string | null {
 function holdNotice(group: TeamGroupId, hold: TeamHold): string | null {
   if (hold.lateDays <= 0) return null;
   const stage = stuckStage(group, hold.doing);
-  return stage ? `Supposed to be free, still in ${stage}` : "Supposed to be free";
+  const days = `${hold.lateDays} day${hold.lateDays === 1 ? "" : "s"}`;
+  return stage ? `Supposed to be free, still in ${stage} · ${days}` : `Supposed to be free · ${days}`;
 }
 
 export function TeamBoard() {
@@ -165,7 +166,10 @@ export function TeamBoard() {
                     person.holds.map((hold, index) => {
                       const notice = holdNotice(group.id, hold);
                       return (
-                      <tr key={`${person.name}-${hold.title}`} className="align-top hover:bg-white/[0.02]">
+                      <tr
+                        key={`${person.name}-${hold.title}`}
+                        className={`align-top hover:bg-white/[0.02] ${notice ? "bg-rose-400/15" : ""}`}
+                      >
                         {index === 0 && (
                           <td rowSpan={person.holds.length} className="px-4 py-3 font-medium text-white">
                             {person.name}

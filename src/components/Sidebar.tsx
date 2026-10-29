@@ -6,9 +6,9 @@ import { useEffect, useState } from "react";
 const navItems = [
   { href: "/", label: "Today", icon: "◉" },
   { href: "/tasks", label: "Tasks", icon: "☑" },
-  { href: "/pipeline", label: "Pipeline", icon: "▤" },
   { href: "/planner", label: "Calendar", icon: "▦" },
   { href: "/plan", label: "Plan", icon: "◷" },
+  { href: "/pipeline", label: "Pipeline", icon: "▤" },
   { href: "/team", label: "Team", icon: "☰" },
   { href: "/demarcate", label: "Demarcate", icon: "✎" },
 ];

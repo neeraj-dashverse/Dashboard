@@ -22,8 +22,8 @@ export function TasksBoard({ incoming }: { incoming: IncomingPromo[] }) {
         </p>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Tasks</h1>
         <p className="mt-1 max-w-3xl text-[13px] leading-5 text-slate-400">
-          The full list. Today stays the day glance. Calendar and Plan are unchanged — this page
-          only reads them. {tasks.length === 0 ? "Nothing needs you right now." : `${tasks.length} open.`}
+          The only alert list. Today is the short summary.{" "}
+          {tasks.length === 0 ? "Nothing needs you right now." : `${tasks.length} open.`}
         </p>
       </div>
 
