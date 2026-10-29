@@ -5,7 +5,6 @@ import { useOps } from "./OpsProvider";
 /** Compact live-data status bar: source, unsaved edits, sheet links, actions. */
 export function SyncStrip() {
   const { snap, reset, busy } = useOps();
-  const pending = snap.pendingWrites.filter((w) => w.status === "pending").length;
   const live = snap.live;
 
   return (
@@ -14,16 +13,6 @@ export function SyncStrip() {
         <span className={`h-2 w-2 rounded-full ${live ? "bg-emerald-400" : "bg-amber-400"}`} />
         <span className="font-semibold text-slate-200">{live ? "Live" : "Sample data"}</span>
         <span className="text-slate-500">· {snap.workingSource.spreadsheetName}</span>
-      </span>
-
-      <span className="text-slate-600">|</span>
-
-      <span className="text-slate-400">
-        {pending > 0 ? (
-          <span className="font-semibold text-amber-300">{pending} unsaved edit{pending > 1 ? "s" : ""}</span>
-        ) : (
-          <span className="text-slate-500">All edits saved</span>
-        )}
       </span>
 
       <div className="ml-auto flex flex-wrap items-center gap-1.5">

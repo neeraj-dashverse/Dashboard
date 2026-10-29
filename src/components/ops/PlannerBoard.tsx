@@ -65,6 +65,15 @@ function plannedLabel(note: string): string {
   return `Planned ${note}`;
 }
 
+function plannedChipClass(note: string): string {
+  const label = plannedLabel(note);
+  if (label === "Planned Rough cut") return "bg-amber-400/35 text-amber-50";
+  if (label === "Planned Final cut") return "bg-lime-400/35 text-lime-50";
+  if (label === "Planned Sound") return "bg-cyan-400/35 text-cyan-50";
+  if (label === "Planned Assets") return "bg-indigo-400/35 text-indigo-50";
+  return "bg-white/10 text-white";
+}
+
 function chipClass(label: string): string {
   const key = (Object.keys(STAGE_CHIP) as (keyof typeof STAGE_CHIP)[]).find((k) =>
     label === k || label.startsWith(`${k} ·`)
@@ -253,7 +262,7 @@ export function PlannerBoard() {
           </span>
         ))}
         <span className="flex items-center gap-1.5">
-          <span className="rounded border border-dashed border-white/30 px-1.5 py-0.5 font-semibold text-slate-200">
+          <span className="rounded border border-dashed border-amber-200/50 bg-amber-400/35 px-1.5 py-0.5 font-semibold text-amber-50">
             Planned Rough cut
           </span>
           date you set
@@ -537,7 +546,7 @@ function Grid({
                           .map((m) => (
                             <div
                               key={m.note}
-                              className={`rounded border border-dashed border-white/20 px-1.5 py-0.5 text-[10px] font-semibold leading-tight ${chipClass(m.note)}`}
+                              className={`rounded border border-dashed border-white/40 px-1.5 py-0.5 text-[10px] font-semibold leading-tight ${plannedChipClass(m.note)}`}
                             >
                               {plannedLabel(m.note)}
                             </div>
