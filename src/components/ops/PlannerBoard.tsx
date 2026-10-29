@@ -57,6 +57,14 @@ const STAGE_SOLID: Record<string, string> = {
   Sound: "bg-fuchsia-500 text-white",
 };
 
+function plannedLabel(note: string): string {
+  if (/rough cut|first cut|first animation|first edit/i.test(note)) return "Planned rough cut";
+  if (/final cut|second cut|correction/i.test(note)) return "Planned final cut";
+  if (/sound/i.test(note)) return "Planned sound";
+  if (/asset/i.test(note)) return "Planned assets";
+  return `Planned ${note}`;
+}
+
 function chipClass(label: string): string {
   const key = (Object.keys(STAGE_CHIP) as (keyof typeof STAGE_CHIP)[]).find((k) =>
     label === k || label.startsWith(`${k} ·`)
@@ -227,7 +235,7 @@ export function PlannerBoard() {
         ))}
         <span className="flex items-center gap-1.5">
           <span className="rounded border border-dashed border-white/30 px-1.5 py-0.5 font-semibold text-slate-200">
-            Planned
+            Planned rough cut
           </span>
           date you set
         </span>
@@ -498,11 +506,16 @@ function Grid({
                       }`}
                     >
                       <div className="min-h-[34px] space-y-1">
-                        {r.planMarks.some((m) => m.date === d) && (
-                          <div className="rounded border border-dashed border-white/30 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-slate-200">
-                            Planned
-                          </div>
-                        )}
+                        {r.planMarks
+                          .filter((m) => m.date === d)
+                          .map((m) => (
+                            <div
+                              key={m.note}
+                              className={`rounded border border-dashed border-white/20 px-1.5 py-0.5 text-[10px] font-semibold leading-tight ${chipClass(m.note)}`}
+                            >
+                              {plannedLabel(m.note)}
+                            </div>
+                          ))}
                         {lanes
                           .filter(
                             (l) => !r.planMarks.some((m) => m.date === d && m.note.startsWith(l.label))
