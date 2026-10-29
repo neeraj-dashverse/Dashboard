@@ -5,7 +5,7 @@ import {
   assetDeadlinesToPush,
   formatDmy,
   promoFor,
-  teamAvailability,
+  teamGroups,
   type TeamPerson,
 } from "@/lib/ops/selectors";
 import { Kpi, SectionTitle } from "./ui";
@@ -13,18 +13,19 @@ import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
 
 function whenFree(person: TeamPerson, today: string): string {
-  if (person.free) return "Free now";
   if (!person.freeAt) return "No plan date";
-  if (person.freeAt < today) return `Still on it · plan was ${formatDmy(person.freeAt)}`;
+  if (person.freeAt < today) return `Not free · plan was ${formatDmy(person.freeAt)}`;
   if (person.freeAt === today) return "Free today";
   return formatDmy(person.freeAt);
 }
 
 export function TeamBoard() {
   const { snap, act, busy } = useOps();
-  const people = teamAvailability(snap);
-  const free = people.filter((p) => p.free).length;
-  const unplanned = people.filter((p) => !p.free && !p.freeAt).length;
+  const groups = teamGroups(snap);
+  const delayed = groups.reduce(
+    (n, group) => n + group.people.filter((p) => p.holds.some((h) => h.lateDays > 0)).length,
+    0
+  );
   const deadlines = assetDeadlinesToPush(snap);
   const reviewsWithWeak = snap.qualityReviews.filter(
     (r) => r.animation?.weakAreas || r.editing?.remark || r.animation?.remark
@@ -37,27 +38,18 @@ export function TeamBoard() {
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">
           Who is <span className="gradient-text">free</span>
         </h1>
-        <p className="mt-1 text-[12px] text-slate-500">
-          From the calendar and plan dates. Free now means no open row. Free on is the latest plan date on the work they still have.
+        <p className="mt-1 max-w-3xl text-[12px] text-slate-500">
+          Ongoing calendar work, split by assets, animators, editors, and agency. Free on is the latest plan date. A promo still open after that date is taking more days.
         </p>
       </div>
 
       <SyncStrip />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        <Kpi label="People" value={people.length} />
-        <Kpi label="Free now" value={free} tone="text-emerald-300" />
-        <Kpi label="Busy" value={people.length - free} tone="text-slate-200" />
-        <Kpi
-          label="No plan date"
-          value={unplanned}
-          tone={unplanned ? "text-amber-300" : "text-white"}
-        />
-        <Kpi
-          label="Asset deadlines to push"
-          value={deadlines.length}
-          tone={deadlines.length ? "text-amber-300" : "text-white"}
-        />
+        {groups.map((group) => (
+          <Kpi key={group.id} label={group.label} value={group.people.length} />
+        ))}
+        <Kpi label="Over plan" value={delayed} tone={delayed ? "text-rose-300" : "text-emerald-300"} />
       </div>
 
       {deadlines.length > 0 && (
@@ -111,67 +103,87 @@ export function TeamBoard() {
         </section>
       )}
 
-      <section className="space-y-2">
-        <SectionTitle
-          title="Free and when"
-          hint="Open calendar rows only. The date is the latest plan mark on that work."
-        />
-        <div className="overflow-hidden rounded-xl border border-white/[0.08]">
-          <table className="w-full text-left text-[13px]">
-            <thead className="bg-white/[0.03] text-[10px] uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Person</th>
-                <th className="px-4 py-3 font-semibold">Role</th>
-                <th className="px-4 py-3 font-semibold">Free on</th>
-                <th className="px-4 py-3 font-semibold">Holding</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/[0.05]">
-              {people.map((person) => {
-                const label = whenFree(person, snap.today);
-                return (
-                  <tr key={person.name} className="hover:bg-white/[0.02]">
-                    <td className="px-4 py-3 font-medium text-white">{person.name}</td>
-                    <td className="px-4 py-3 text-[11px] text-slate-400">{person.roles.join(" · ")}</td>
-                    <td
-                      className={`px-4 py-3 text-[12px] font-semibold ${
-                        person.free
-                          ? "text-emerald-300"
-                          : !person.freeAt || person.freeAt < snap.today
-                            ? "text-amber-200"
-                            : "text-[#9bb0ff]"
-                      }`}
-                    >
-                      {label}
-                    </td>
-                    <td className="px-4 py-3">
-                      {person.holds.length === 0 ? (
-                        <span className="text-slate-600">—</span>
-                      ) : (
-                        <div className="flex flex-col gap-1">
-                          {person.holds.slice(0, 3).map((hold) => (
-                            <Link
-                              key={hold.label}
-                              href={`/plan/${encodeURIComponent(hold.promoId)}`}
-                              className="truncate text-[11px] text-slate-300 hover:text-white"
-                              title={hold.label}
-                            >
-                              {hold.label}
-                            </Link>
-                          ))}
-                          {person.holds.length > 3 && (
-                            <p className="text-[11px] text-slate-500">+{person.holds.length - 3} more</p>
-                          )}
-                        </div>
-                      )}
-                    </td>
+      {groups.map((group) => (
+        <section key={group.id} className="space-y-2">
+          <SectionTitle
+            title={group.label}
+            hint={
+              group.id === "animator" || group.id === "agency"
+                ? group.freeNow.length
+                  ? `Free now: ${group.freeNow.join(", ")}`
+                  : "No one in this group is free right now."
+                : "Each open promo shows the current stage, the plan date, and extra days if that plan has passed."
+            }
+          />
+          {group.people.length === 0 ? (
+            <p className="rounded-xl border border-white/[0.08] px-4 py-3 text-[12px] text-slate-500">
+              No ongoing work.
+            </p>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-white/[0.08]">
+              <table className="w-full table-fixed text-left text-[13px]">
+                <thead className="bg-white/[0.03] text-[10px] uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="w-[18%] px-4 py-3 font-semibold">Person</th>
+                    <th className="w-[42%] px-4 py-3 font-semibold">Doing now</th>
+                    <th className="w-[20%] px-4 py-3 font-semibold">Free on</th>
+                    <th className="w-[20%] px-4 py-3 font-semibold">Over plan</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                </thead>
+                <tbody className="divide-y divide-white/[0.05]">
+                  {group.people.map((person) =>
+                    person.holds.map((hold, index) => (
+                      <tr key={`${person.name}-${hold.title}`} className="align-top hover:bg-white/[0.02]">
+                        {index === 0 && (
+                          <td rowSpan={person.holds.length} className="px-4 py-3 font-medium text-white">
+                            {person.name}
+                          </td>
+                        )}
+                        <td className="px-4 py-3">
+                          <Link
+                            href={`/plan/${encodeURIComponent(hold.promoId)}`}
+                            className="block text-[12px] font-semibold text-slate-200 hover:text-white"
+                          >
+                            {hold.title}
+                          </Link>
+                          <p className="mt-0.5 text-[11px] text-slate-400">
+                            {hold.doing}
+                            {hold.until ? ` · plan ${formatDmy(hold.until)}` : ""}
+                            {hold.plan && hold.plan !== "Plan" ? ` · ${hold.plan}` : ""}
+                          </p>
+                        </td>
+                        {index === 0 && (
+                          <td
+                            rowSpan={person.holds.length}
+                            className={`px-4 py-3 text-[12px] font-semibold ${
+                              !person.freeAt || person.freeAt < snap.today
+                                ? "text-amber-200"
+                                : "text-[#9bb0ff]"
+                            }`}
+                          >
+                            {whenFree(person, snap.today)}
+                          </td>
+                        )}
+                        <td
+                          className={`px-4 py-3 text-[12px] font-semibold ${
+                            hold.lateDays > 0 ? "text-rose-300" : "text-emerald-300/80"
+                          }`}
+                        >
+                          {hold.lateDays > 0
+                            ? `${hold.lateDays} more day${hold.lateDays === 1 ? "" : "s"}`
+                            : hold.until
+                              ? "On plan"
+                              : "No plan date"}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ))}
 
       {reviewsWithWeak.length > 0 && (
         <section className="space-y-2">

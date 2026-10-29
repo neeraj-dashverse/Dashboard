@@ -550,25 +550,39 @@ export function isAssetOpen(promo: Promo): boolean {
   return true;
 }
 
+export type TeamGroupId = "assets" | "animator" | "editor" | "agency";
+
 export type TeamHold = {
   promoId: string;
-  label: string;
-  /** Latest plan date on this row. Null when the calendar row has no plan. */
+  title: string;
+  /** Current calendar status for this row. */
+  doing: string;
+  plan: string;
   until: string | null;
+  /** Days past the plan while the row is still open. */
+  lateDays: number;
 };
 
 export type TeamPerson = {
   name: string;
-  roles: Array<"Animator" | "Editor" | "Assets">;
-  /** No open calendar row. */
-  free: boolean;
-  /**
-   * When their open calendar work is planned to finish.
-   * Today when already free. Null when they are busy and a job has no plan date.
-   */
+  /** Latest plan date across the open rows in this group. */
   freeAt: string | null;
   holds: TeamHold[];
 };
+
+export type TeamGroup = {
+  id: TeamGroupId;
+  label: string;
+  people: TeamPerson[];
+  freeNow: string[];
+};
+
+const TEAM_GROUP_ORDER: { id: TeamGroupId; label: string }[] = [
+  { id: "assets", label: "Assets" },
+  { id: "animator", label: "Animators" },
+  { id: "editor", label: "Editors" },
+  { id: "agency", label: "Agency" },
+];
 
 function personKey(name: string): string {
   return name.trim().toLowerCase();
@@ -590,45 +604,47 @@ function rowRelease(row: PlannerRow): { until: string | null; plan: string } {
   return { until: null, plan: "No plan date" };
 }
 
-/**
- * Who is free, and when they will be free, from the calendar and plan dates.
- * Animators on the roster with no open row are free now. A busy person is free
- * on the latest plan date across the rows they are still on.
- */
-export function teamAvailability(snap: OpsSnapshot): TeamPerson[] {
-  const map = new Map<string, TeamPerson>();
+function currentDoing(row: PlannerRow, today: string, tab: PlannerTab): string {
+  const now = dayLanes(row, today, today, tab);
+  if (now[0]?.label) return now[0].label;
+  if (tab === "preprod") return row.promo.assetTeam?.assetsStatus?.trim() || "Assets";
+  if (row.part) return STAGE_LABEL[row.part.stage] ?? row.part.stage;
+  return "—";
+}
 
-  const ensure = (raw: string, role: TeamPerson["roles"][number]): TeamPerson | null => {
+/**
+ * Ongoing calendar work, split by assets, in-house animators, editors, and agency.
+ * Each open row says what they are doing, the plan date, and how many days it is over.
+ */
+export function teamGroups(snap: OpsSnapshot): TeamGroup[] {
+  const buckets = new Map<TeamGroupId, Map<string, TeamPerson>>();
+  for (const group of TEAM_GROUP_ORDER) buckets.set(group.id, new Map());
+
+  const addHold = (group: TeamGroupId, raw: string, row: PlannerRow, title: string, tab: PlannerTab) => {
     const name = raw.trim();
     const key = personKey(name);
-    if (!key || key.startsWith("a:")) return null;
-    let person = map.get(key);
+    if (!key || key.startsWith("a:")) return;
+    const people = buckets.get(group)!;
+    let person = people.get(key);
     if (!person) {
-      person = { name, roles: [], free: true, freeAt: snap.today, holds: [] };
-      map.set(key, person);
+      person = { name, freeAt: null, holds: [] };
+      people.set(key, person);
     }
-    if (!person.roles.includes(role)) person.roles.push(role);
-    return person;
-  };
-
-  const addHold = (
-    raw: string,
-    role: TeamPerson["roles"][number],
-    row: PlannerRow,
-    what: string
-  ) => {
-    const person = ensure(raw, role);
-    if (!person) return;
     const rel = rowRelease(row);
-    const label = `${what} · ${rel.plan}`;
-    if (person.holds.some((h) => h.label === label)) return;
-    person.holds.push({ promoId: row.promo.id, label, until: rel.until });
+    if (person.holds.some((h) => h.title === title)) return;
+    person.holds.push({
+      promoId: row.promo.id,
+      title,
+      doing: currentDoing(row, snap.today, tab),
+      plan: rel.plan,
+      until: rel.until,
+      lateDays:
+        row.plannedDate && row.plannedDate < snap.today ? daysLate(row.plannedDate, snap.today) : 0,
+    });
   };
-
-  for (const animator of snap.animators) ensure(animator.name, "Animator");
 
   for (const row of plannerRows(snap)) {
-    const what = `${row.promo.showName || "—"} · ${row.promo.promoName || "—"} · P${row.partNo}`;
+    const title = `${row.promo.showName || "—"} · ${row.promo.promoName || "—"} · P${row.partNo}`;
     const artists = splitPersonNames(row.part?.artist);
     if (artists.length === 0 && row.part) {
       for (const credit of row.part.artists) {
@@ -636,36 +652,54 @@ export function teamAvailability(snap: OpsSnapshot): TeamPerson[] {
         if (named) artists.push(named);
       }
     }
-    for (const name of artists) addHold(name, "Animator", row, what);
-    for (const name of splitPersonNames(row.part?.editors)) addHold(name, "Editor", row, what);
+    const group: TeamGroupId = row.part?.team === "agency" ? "agency" : "animator";
+    for (const name of artists) addHold(group, name, row, title, "production");
+    for (const name of splitPersonNames(row.part?.editors)) addHold("editor", name, row, title, "production");
   }
 
   for (const row of plannerPreprodRows(snap)) {
-    const what = `${row.promo.showName || "—"} · ${row.promo.promoName || "—"}`;
+    const title = `${row.promo.showName || "—"} · ${row.promo.promoName || "—"}`;
     const team = row.promo.assetTeam;
     const names = [team?.artist1, team?.artist2, team?.artist3, team?.artLead].flatMap((n) =>
       splitPersonNames(n)
     );
-    for (const name of names) addHold(name, "Assets", row, what);
+    for (const name of names) addHold("assets", name, row, title, "preprod");
   }
 
-  for (const person of map.values()) {
-    if (person.holds.length === 0) {
-      person.free = true;
-      person.freeAt = snap.today;
-      continue;
+  const busyEverywhere = new Set<string>();
+  for (const people of buckets.values()) {
+    for (const person of people.values()) busyEverywhere.add(personKey(person.name));
+  }
+
+  const sortPeople = (people: TeamPerson[]) =>
+    people.sort((a, b) => {
+      const lateA = Math.max(0, ...a.holds.map((h) => h.lateDays));
+      const lateB = Math.max(0, ...b.holds.map((h) => h.lateDays));
+      if (lateA !== lateB) return lateB - lateA;
+      if (a.freeAt && b.freeAt) return a.freeAt.localeCompare(b.freeAt);
+      if (a.freeAt) return -1;
+      if (b.freeAt) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+  return TEAM_GROUP_ORDER.map((group) => {
+    const people = [...(buckets.get(group.id)?.values() ?? [])];
+    for (const person of people) {
+      const dates = person.holds.map((h) => h.until).filter((d): d is string => !!d);
+      person.freeAt = dates.length === person.holds.length ? dates.sort().at(-1) ?? null : null;
+      person.holds.sort((a, b) => b.lateDays - a.lateDays || (a.until ?? "").localeCompare(b.until ?? ""));
     }
-    person.free = false;
-    const dates = person.holds.map((h) => h.until).filter((d): d is string => !!d);
-    person.freeAt = dates.length === person.holds.length ? dates.sort().at(-1) ?? null : null;
-  }
-
-  return [...map.values()].sort((a, b) => {
-    if (a.free !== b.free) return a.free ? -1 : 1;
-    if (a.freeAt && b.freeAt) return a.freeAt.localeCompare(b.freeAt);
-    if (a.freeAt) return -1;
-    if (b.freeAt) return 1;
-    return a.name.localeCompare(b.name);
+    const roster =
+      group.id === "animator"
+        ? snap.animators.filter((a) => a.team !== "agency")
+        : group.id === "agency"
+          ? snap.animators.filter((a) => a.team === "agency")
+          : [];
+    const freeNow = roster
+      .map((a) => a.name.trim())
+      .filter((name) => name && !busyEverywhere.has(personKey(name)))
+      .sort((a, b) => a.localeCompare(b));
+    return { ...group, people: sortPeople(people), freeNow };
   });
 }
 
