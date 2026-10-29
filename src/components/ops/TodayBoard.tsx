@@ -32,6 +32,11 @@ const PAGES = [
     title: "Team",
     line: "Who is free, and who was supposed to be free but is still in a stage.",
   },
+  {
+    href: "/record",
+    title: "Record",
+    line: "Every promo: who worked, days taken, and initial and final duration.",
+  },
 ] as const;
 
 export function TodayBoard() {

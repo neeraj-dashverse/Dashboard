@@ -74,6 +74,111 @@ export function part1Artist(snap: OpsSnapshot, promoId: string): string | null {
   return null;
 }
 
+export type PromoPartRecord = {
+  partNo: number;
+  artist: string;
+  editor: string;
+  stage: string;
+  /** Part length from Production Tracker column F. */
+  lengthSec: number;
+  /** Worked time from column AF, when the sheet has it. */
+  workedSec: number | null;
+  days: number | null;
+};
+
+export type PromoRecord = {
+  id: string;
+  showName: string;
+  promoName: string;
+  status: string;
+  /** Master Tracker initial duration. */
+  initialSec: number | null;
+  /** Sum of part lengths. */
+  finalSec: number | null;
+  assetPeople: string;
+  assetDays: number | null;
+  days: number | null;
+  parts: PromoPartRecord[];
+};
+
+function daySpan(start: string | null | undefined, end: string | null | undefined): number | null {
+  const a = toIsoLoose(start);
+  const b = toIsoLoose(end);
+  if (!a || !b || b < a) return null;
+  return daysLate(a, b);
+}
+
+/** Every promo on the tracker or production sheet, including closed ones. */
+export function promoRecords(snap: OpsSnapshot): PromoRecord[] {
+  const byId = new Map(snap.promos.map((promo) => [promo.id, promo]));
+  const partGroups = new Map<string, Part[]>();
+  for (const part of snap.parts) {
+    const list = partGroups.get(part.promoId) ?? [];
+    list.push(part);
+    partGroups.set(part.promoId, list);
+  }
+
+  const ids = new Set<string>([...byId.keys(), ...partGroups.keys()]);
+  const records: PromoRecord[] = [];
+  for (const id of ids) {
+    const promo = byId.get(id);
+    const parts = (partGroups.get(id) ?? []).slice().sort((a, b) => a.partNo - b.partNo);
+    const [showFallback, nameFallback] = id.split("|");
+    const asset = promo?.assetTeam;
+    const assetPeople = [asset?.artist1, asset?.artist2, asset?.artist3, asset?.artLead]
+      .map((name) => name?.trim())
+      .filter((name): name is string => !!name)
+      .join(", ");
+    const assetDays =
+      asset?.totalDays ??
+      asset?.productionDays ??
+      daySpan(asset?.startDate, asset?.correctionsEndDate || asset?.endDate);
+
+    const partRows: PromoPartRecord[] = parts.map((part) => ({
+      partNo: part.partNo,
+      artist: part.artist?.trim() || "—",
+      editor: part.editors?.trim() || "—",
+      stage: STAGE_LABEL[part.stage] ?? part.stage,
+      lengthSec: part.durationSec,
+      workedSec: part.workedDurationSec,
+      days:
+        part.days ??
+        daySpan(
+          part.aniStartDate ?? part.plannedPlottedDate,
+          part.soundEndDate ?? part.correctionEndDate ?? part.editCloseDate ?? part.aniCloseDate
+        ),
+    }));
+
+    const lengths = partRows.map((part) => part.lengthSec).filter((seconds) => seconds > 0);
+    const starts = parts
+      .map((part) => part.aniStartDate ?? part.plannedPlottedDate)
+      .filter((date): date is string => !!date)
+      .sort();
+    const ends = parts
+      .map((part) => part.soundEndDate ?? part.correctionEndDate ?? part.editCloseDate ?? part.aniCloseDate)
+      .filter((date): date is string => !!date)
+      .sort();
+    const delivered = parts.length > 0 && parts.every((part) => part.stage === "delivered");
+
+    records.push({
+      id,
+      showName: promo?.showName || showFallback || "—",
+      promoName: promo?.promoName || nameFallback || "—",
+      status: promo?.trackerStatus || promo?.status || (delivered ? "Delivered" : parts.length ? "WIP" : "—"),
+      initialSec: promo?.initialDurationSec ?? null,
+      finalSec: lengths.length ? lengths.reduce((sum, seconds) => sum + seconds, 0) : null,
+      assetPeople,
+      assetDays,
+      days: daySpan(starts[0], ends[ends.length - 1]) ?? assetDays,
+      parts: partRows,
+    });
+  }
+
+  return records.sort(
+    (a, b) => a.showName.localeCompare(b.showName) || a.promoName.localeCompare(b.promoName)
+  );
+}
+
 export function partLabel(snap: OpsSnapshot, part: Part): string {
   const promo = promoFor(snap, part.promoId);
   if (!promo) return `Part ${part.partNo}`;
