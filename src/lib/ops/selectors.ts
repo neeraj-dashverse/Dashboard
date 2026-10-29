@@ -799,31 +799,21 @@ function enumerateDays(start: string, end: string): string[] {
   return out;
 }
 
-/**
- * Every weekday the planner should show at once: from a few days before the
- * earliest live date through a couple of weeks after the latest, clamped to a
- * working window around today so old delivered work doesn't stretch the grid.
- */
-export function plannerDays(snap: OpsSnapshot): string[] {
-  const rows = [...plannerPreprodRows(snap), ...plannerRows(snap)];
-  const dates = new Set<string>([snap.today]);
+/** Date columns for one tab, from the first real start on that set through the last date. */
+export function plannerDays(snap: OpsSnapshot, tab: PlannerTab): string[] {
+  const rows = tab === "preprod" ? plannerPreprodRows(snap) : plannerRows(snap);
+  const dates = new Set<string>();
   for (const r of rows) {
     for (const d of occupancyDates(r, snap.today)) dates.add(d);
   }
   for (const c of snap.plannerCells) {
-    if (rows.some((r) => r.promo.id === c.promoId && r.partNo === c.partNo)) {
-      dates.add(c.date);
-    }
+    if (rows.some((r) => r.promo.id === c.promoId && r.partNo === c.partNo)) dates.add(c.date);
   }
-  const floor = addDaysIso(snap.today, -14);
-  const ceil = addDaysIso(snap.today, 18);
-  const inWindow = [...dates].filter((d) => d >= floor && d <= ceil).sort();
-  const start = addDaysIso(inWindow[0] ?? snap.today, -1);
-  let end = addDaysIso(inWindow[inWindow.length - 1] ?? snap.today, 8);
-  if (end < addDaysIso(snap.today, 14)) end = addDaysIso(snap.today, 14);
-  if (end > ceil) end = ceil;
-  const from = start < floor ? floor : start;
-  return enumerateDays(from, end);
+  if (dates.size === 0) return enumerateDays(snap.today, addDaysIso(snap.today, 14));
+  const sorted = [...dates].sort();
+  let end = sorted[sorted.length - 1];
+  if (end < snap.today) end = snap.today;
+  return enumerateDays(sorted[0], addDaysIso(end, 1));
 }
 
 const STALE_DAYS = 2;

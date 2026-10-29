@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import {
   artistName,
   dayLanes,
@@ -58,10 +58,10 @@ const STAGE_SOLID: Record<string, string> = {
 };
 
 function plannedLabel(note: string): string {
-  if (/rough cut|first cut|first animation|first edit/i.test(note)) return "Planned first cut";
-  if (/final cut|second cut|correction/i.test(note)) return "Planned final cut";
-  if (/sound/i.test(note)) return "Planned sound";
-  if (/asset/i.test(note)) return "Planned assets";
+  if (/rough cut|first cut|first animation|first edit/i.test(note)) return "Planned Rough cut";
+  if (/final cut|second cut|correction/i.test(note)) return "Planned Final cut";
+  if (/sound/i.test(note)) return "Planned Sound";
+  if (/asset/i.test(note)) return "Planned Assets";
   return `Planned ${note}`;
 }
 
@@ -88,7 +88,7 @@ function addDays(iso: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Sticky left columns — Production keeps Artist and Editor apart. */
+const DAY_COL = "min-w-[150px] w-[150px]";
 const W_PROD = { show: 120, promo: 140, part: 44, artist: 110, editor: 110 };
 const W_ASSET = { show: 180, promo: 140, people: 150 };
 const LEFT_PROD = {
@@ -108,13 +108,15 @@ export function PlannerBoard() {
   const { snap } = useOps();
   const [tab, setTab] = useState<PlannerTab>("preprod");
   const [shift, setShift] = useState(0);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const pendingToday = useRef(false);
 
   const rows = useMemo(
     () => (tab === "preprod" ? plannerPreprodRows(snap) : plannerRows(snap)),
     [snap, tab]
   );
   const days = useMemo(() => {
-    const base = plannerDays(snap);
+    const base = plannerDays(snap, tab);
     if (shift === 0 || base.length === 0) return base;
     const first = addDays(base[0], shift);
     const last = addDays(base[base.length - 1], shift);
@@ -125,7 +127,18 @@ export function PlannerBoard() {
       d = addDays(d, 1);
     }
     return out;
-  }, [snap, shift]);
+  }, [snap, shift, tab]);
+
+  useEffect(() => {
+    if (!pendingToday.current) return;
+    pendingToday.current = false;
+    const box = scrollerRef.current;
+    const el = box?.querySelector("[data-cal-today]");
+    if (!box || !(el instanceof HTMLElement)) return;
+    const boxRect = box.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    box.scrollLeft += elRect.left - boxRect.left - box.clientWidth / 2 + elRect.width / 2;
+  }, [days, tab]);
 
   const promoCount = new Set(rows.map((r) => r.promo.id)).size;
 
@@ -182,7 +195,10 @@ export function PlannerBoard() {
           </button>
           <button
             type="button"
-            onClick={() => setShift(0)}
+            onClick={() => {
+              pendingToday.current = true;
+              setShift(0);
+            }}
             className="rounded-md bg-white/[0.05] px-2.5 py-1.5 text-[12px] font-semibold text-slate-300 hover:text-white"
           >
             Today
@@ -207,7 +223,10 @@ export function PlannerBoard() {
           <button
             key={id}
             type="button"
-            onClick={() => setTab(id)}
+            onClick={() => {
+              setShift(0);
+              setTab(id);
+            }}
             className={`flex-1 rounded-lg px-3 py-2 text-[13px] font-bold ${
               tab === id
                 ? "bg-gradient-to-r from-[#4361ee]/40 to-[#d6293d]/30 text-white"
@@ -235,7 +254,7 @@ export function PlannerBoard() {
         ))}
         <span className="flex items-center gap-1.5">
           <span className="rounded border border-dashed border-white/30 px-1.5 py-0.5 font-semibold text-slate-200">
-            Planned first cut
+            Planned Rough cut
           </span>
           date you set
         </span>
@@ -261,6 +280,7 @@ export function PlannerBoard() {
         </p>
       ) : (
         <Grid
+          scrollerRef={scrollerRef}
           days={days}
           rows={rows}
           snapToday={snap.today}
@@ -281,6 +301,7 @@ export function PlannerBoard() {
 }
 
 function Grid({
+  scrollerRef,
   days,
   rows,
   snapToday,
@@ -289,6 +310,7 @@ function Grid({
   peopleOf,
   laneChip,
 }: {
+  scrollerRef: Ref<HTMLDivElement>;
   days: string[];
   rows: PlannerRow[];
   snapToday: string;
@@ -303,7 +325,10 @@ function Grid({
     "sticky top-0 z-40 border-b border-white/[0.08] bg-[#17171d] px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500";
 
   return (
-    <div className="max-h-[calc(100dvh-15rem)] overflow-auto rounded-xl border border-white/[0.08] bg-[#121216]">
+    <div
+      ref={scrollerRef}
+      className="max-h-[calc(100dvh-15rem)] overflow-auto rounded-xl border border-white/[0.08] bg-[#121216]"
+    >
       <table className="border-separate border-spacing-0 text-left">
         <thead>
           <tr>
@@ -363,7 +388,8 @@ function Grid({
               return (
                 <th
                   key={d}
-                  className={`sticky top-0 z-30 min-w-[108px] border-b border-white/[0.08] px-1.5 py-2 text-[11px] font-bold ${
+                  data-cal-today={today ? "" : undefined}
+                  className={`sticky top-0 z-30 ${DAY_COL} border-b border-white/[0.08] px-1.5 py-2 text-[11px] font-bold ${
                     holiday
                       ? "bg-[#2a2218] text-amber-100/90"
                       : today
@@ -495,9 +521,9 @@ function Grid({
                   return (
                     <td
                       key={d}
-                      className={`min-w-[92px] border-b border-white/[0.05] p-1 align-top ${
+                      className={`${DAY_COL} border-b border-white/[0.05] p-1 align-top ${
                         delayed
-                          ? "bg-rose-500/20 ring-1 ring-inset ring-rose-400/80"
+                          ? "bg-rose-500/55 shadow-[inset_0_0_0_3px_#fb7185]"
                           : holiday
                             ? "bg-[repeating-linear-gradient(135deg,rgba(245,158,11,0.07)_0_6px,transparent_6px_12px)]"
                             : d === snapToday
