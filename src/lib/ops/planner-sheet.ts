@@ -33,15 +33,21 @@ function sheets() {
   return writeClient;
 }
 
+let plannerReady = false;
+
 /** Create the Planner tab (with header) if it doesn't exist yet. Idempotent. */
 export async function ensurePlannerTab(): Promise<"exists" | "created"> {
+  if (plannerReady) return "exists";
   const api = sheets();
   const meta = await api.spreadsheets.get({
     spreadsheetId: SHEET_ID,
     fields: "sheets.properties.title",
   });
   const has = (meta.data.sheets ?? []).some((s) => s.properties?.title === PLANNER_TAB);
-  if (has) return "exists";
+  if (has) {
+    plannerReady = true;
+    return "exists";
+  }
   try {
     await api.spreadsheets.batchUpdate({
       spreadsheetId: SHEET_ID,
@@ -60,7 +66,10 @@ export async function ensurePlannerTab(): Promise<"exists" | "created"> {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (/already exists/i.test(msg)) return "exists";
+    if (/already exists/i.test(msg)) {
+      plannerReady = true;
+      return "exists";
+    }
     throw err;
   }
   await api.spreadsheets.values.update({
@@ -69,6 +78,7 @@ export async function ensurePlannerTab(): Promise<"exists" | "created"> {
     valueInputOption: "RAW",
     requestBody: { values: [HEADER] },
   });
+  plannerReady = true;
   return "created";
 }
 

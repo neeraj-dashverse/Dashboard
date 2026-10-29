@@ -278,6 +278,60 @@ export const sheetsAdapter: OpsAdapter = {
     return hydrateFromSheetsAndDb();
   },
   async act(action) {
+    // Record only touches the Planner tab. Reloading every sheet first is what
+    // made the click wait several seconds.
+    if (action.type === "record_plan_part") {
+      try {
+        await syncPlanPart({
+          showName: action.showName || "",
+          promoName: action.promoName || "",
+          promoId: action.promoId,
+          partNo: action.partNo,
+          updatedAt: new Date().toISOString().slice(0, 10),
+          slots: action.slots,
+        });
+      } catch (err) {
+        console.error("[ops] Plan record failed:", err);
+        throw err;
+      }
+      if (hasLiveHydration()) {
+        for (const slot of action.slots) {
+          const re = new RegExp(slot.match, "i");
+          const prev = getSnapshot().plannerCells.filter(
+            (c) => c.promoId === action.promoId && c.partNo === action.partNo && re.test(c.text)
+          );
+          for (const old of prev) {
+            if (old.date === slot.date && slot.date) continue;
+            applyAction(
+              {
+                type: "set_plan_cell",
+                promoId: action.promoId,
+                partNo: action.partNo,
+                date: old.date,
+                text: "",
+              },
+              { recordWrite: false }
+            );
+          }
+          if (slot.date.trim()) {
+            applyAction(
+              {
+                type: "set_plan_cell",
+                promoId: action.promoId,
+                partNo: action.partNo,
+                date: slot.date,
+                text: slot.label,
+                showName: action.showName,
+                promoName: action.promoName,
+              },
+              { recordWrite: false }
+            );
+          }
+        }
+      }
+      return getSnapshot();
+    }
+
     // Each Vercel request starts empty. A plan save must not answer with the
     // sample promos, or the open promo page loses the row it just edited.
     if (!hasLiveHydration()) {
@@ -290,60 +344,7 @@ export const sheetsAdapter: OpsAdapter = {
       return getSnapshot();
     }
 
-    // Planner cells go straight to the Planner tab (no queue): update the
-    // in-memory grid first so the UI is instant, then write; roll back on failure.
-    if (action.type === "record_plan_part") {
-      const before = getSnapshot();
-      const promo = before.promos.find((p) => p.id === action.promoId);
-      try {
-        await syncPlanPart({
-          showName: action.showName || promo?.showName || "",
-          promoName: action.promoName || promo?.promoName || "",
-          promoId: action.promoId,
-          partNo: action.partNo,
-          updatedAt: before.today,
-          slots: action.slots,
-        });
-      } catch (err) {
-        console.error("[ops] Plan record failed:", err);
-        throw err;
-      }
-      for (const slot of action.slots) {
-        const re = new RegExp(slot.match, "i");
-        const prev = getSnapshot().plannerCells.filter(
-          (c) => c.promoId === action.promoId && c.partNo === action.partNo && re.test(c.text)
-        );
-        for (const old of prev) {
-          if (old.date === slot.date && slot.date) continue;
-          applyAction(
-            {
-              type: "set_plan_cell",
-              promoId: action.promoId,
-              partNo: action.partNo,
-              date: old.date,
-              text: "",
-            },
-            { recordWrite: false }
-          );
-        }
-        if (slot.date.trim()) {
-          applyAction(
-            {
-              type: "set_plan_cell",
-              promoId: action.promoId,
-              partNo: action.partNo,
-              date: slot.date,
-              text: slot.label,
-              showName: action.showName,
-              promoName: action.promoName,
-            },
-            { recordWrite: false }
-          );
-        }
-      }
-      return getSnapshot();
-    }
-
+    // Planner cells go straight to the Planner tab (no queue).
     if (action.type === "set_plan_cell") {
       const before = getSnapshot();
       const prev = before.plannerCells.find(

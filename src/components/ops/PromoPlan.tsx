@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { assetClosedDate, formatDmy } from "@/lib/ops/selectors";
 import type { PlannerCell, Promo } from "@/lib/ops/types";
 import { RemarkBox } from "./PlanBoard";
@@ -158,34 +158,41 @@ function PlanDates({
   open: boolean;
   slots: { label: string; match: string; enabled: boolean }[];
 }) {
-  const { act, busy } = useOps();
+  const { act } = useOps();
   const [error, setError] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
-  const saved = Object.fromEntries(
+  const [localSaved, setLocalSaved] = useState<Record<string, string> | null>(null);
+  const flight = useRef(Promise.resolve());
+  const gen = useRef(0);
+  const fromSheet = Object.fromEntries(
     slots.map((s) => [s.label, savedDate(cells, promo.id, partNo, s.match)])
   );
-  const [draft, setDraft] = useState<Record<string, string>>(saved);
+  const saved = localSaved ?? fromSheet;
+  const [draft, setDraft] = useState<Record<string, string>>(fromSheet);
   const dirty = slots.some((s) => s.enabled && (draft[s.label] ?? "") !== (saved[s.label] ?? ""));
 
-  const record = async () => {
+  const record = () => {
+    const mine = ++gen.current;
+    const nextDraft = { ...draft };
+    setLocalSaved(nextDraft);
     setError(null);
-    setRecording(true);
-    try {
-      await act({
-        type: "record_plan_part",
-        promoId: promo.id,
-        partNo,
-        showName: promo.showName,
-        promoName: promo.promoName,
-        slots: slots
-          .filter((s) => s.enabled)
-          .map((s) => ({ label: s.label, match: s.match, date: draft[s.label] ?? "" })),
+    const payload = {
+      type: "record_plan_part" as const,
+      promoId: promo.id,
+      partNo,
+      showName: promo.showName,
+      promoName: promo.promoName,
+      slots: slots
+        .filter((s) => s.enabled)
+        .map((s) => ({ label: s.label, match: s.match, date: nextDraft[s.label] ?? "" })),
+    };
+    flight.current = flight.current
+      .catch(() => undefined)
+      .then(() => act(payload, { quiet: true }))
+      .catch(() => {
+        if (gen.current !== mine) return;
+        setLocalSaved(null);
+        setError("Those dates did not record. Try again.");
       });
-    } catch {
-      setError("Those dates did not record. Try again.");
-    } finally {
-      setRecording(false);
-    }
   };
 
   return (
@@ -199,7 +206,6 @@ function PlanDates({
           ) : (
             <input
               type="date"
-              disabled={busy}
               value={draft[slot.label] ?? ""}
               onChange={(e) => setDraft((d) => ({ ...d, [slot.label]: e.target.value }))}
               className="rounded-md border border-white/[0.1] bg-[#0e0e13] px-2 py-1 text-[12px] text-white"
@@ -211,11 +217,11 @@ function PlanDates({
         {open && (
           <button
             type="button"
-            disabled={busy || !dirty}
-            onClick={() => void record()}
+            disabled={!dirty}
+            onClick={record}
             className="rounded-md bg-[#4361ee] px-2.5 py-1 text-[11px] font-bold text-white disabled:opacity-40"
           >
-            {recording ? "Recording" : "Record"}
+            Record
           </button>
         )}
         {error && <p className="mt-1 text-[11px] text-rose-300">{error}</p>}
