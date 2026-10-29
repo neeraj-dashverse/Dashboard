@@ -184,7 +184,9 @@ export function promoRecords(snap: OpsSnapshot): PromoRecord[] {
       promoName: promo?.promoName || nameFallback || "—",
       status,
       initialSec: promo?.initialDurationSec ?? null,
-      finalSec: lengths.length ? lengths.reduce((sum, seconds) => sum + seconds, 0) : null,
+      finalSec: lengths.length
+        ? lengths.reduce((sum, seconds) => sum + seconds, 0)
+        : promo?.finalAssetLengthSec ?? null,
       assetPeople,
       assetDays,
       days: daySpan(starts[0], ends[ends.length - 1]) ?? assetDays,

@@ -19,6 +19,8 @@ import {
   buildAnimators,
   matchAsset,
   parseAssets,
+  applyMasterDetail,
+  parseMasterDetails,
   parseParts,
   parsePreProd,
   parsePromos,
@@ -140,7 +142,8 @@ async function loadPlanTabs(): Promise<{ planner: Grid; remarks: Grid }> {
 }
 
 export async function loadFromSheets(): Promise<OpsSnapshot> {
-  const [timeline, assetsBook, planTabs] = await Promise.all([
+  const masterRange = `'${DASHVERSE_PFM_SHEET.tabs.master.name}'!A1:AH3000`;
+  const [timeline, assetsBook, planTabs, masterBook] = await Promise.all([
     batchGet(TIMELINE, [
       RANGES.masterTracker,
       RANGES.productionTracker,
@@ -149,6 +152,10 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
     ]),
     batchGet(ASSETS, [RANGES.assets]),
     loadPlanTabs(),
+    batchGet(DASHVERSE_PFM_SHEET.spreadsheetId, [masterRange]).catch((err) => {
+      console.error("[ops] Master Sheet detail read failed:", err);
+      return {} as Record<string, Grid>;
+    }),
   ]);
 
   const trackerRows: Grid = timeline[RANGES.masterTracker] ?? [];
@@ -205,6 +212,12 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
     const stub = stubPromoFromAsset(a.showName, a.scriptName, a.row);
     stub.preProd = preProd.get(stub.id) ?? null;
     promos.push(stub);
+  }
+
+  const masterDetails = parseMasterDetails(masterBook[masterRange] ?? []);
+  for (const promo of promos) {
+    const detail = masterDetails.get(promo.id.split("#")[0]);
+    if (detail) applyMasterDetail(promo, detail);
   }
 
   return {

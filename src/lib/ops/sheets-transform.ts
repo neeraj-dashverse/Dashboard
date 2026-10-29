@@ -124,6 +124,82 @@ export function parsePromos(rows: Grid): Promo[] {
   return promos;
 }
 
+/** Dashverse<>PFM Master Sheet — links and delivery fields the tracker does not store. */
+export function parseMasterDetails(rows: Grid): Map<string, Partial<Promo>> {
+  const map = new Map<string, Partial<Promo>>();
+  for (const r of rows) {
+    const showName = text(r[0]);
+    const scriptName = text(r[1]);
+    if (!showName && !scriptName) continue;
+    if (normKey(showName || scriptName || "") === "show_name") continue;
+    const id = promoJoinKey(showName ?? "", scriptName ?? "");
+    if (!id || id === "|") continue;
+    const pay = text(r[32]);
+    map.set(id, {
+      finalAssetLengthSec: durationToSec(r[2]),
+      masterStage: text(r[6]),
+      canvasCompletionTimeline: toIsoDate(r[7]),
+      canvasStatus: text(r[8]),
+      fiveMinTimeline: toIsoDate(r[9]),
+      krockLink5Min: text(r[10]),
+      completeDeliverable: toIsoDate(r[11]) ?? text(r[11]),
+      deliverableWithFinalCorrections: text(r[12]),
+      finalCorrectedFiles: text(r[13]),
+      comments: text(r[14]),
+      scriptLink: text(r[15]),
+      canvasLink: text(r[17]),
+      voSamples: text(r[18]),
+      videoSamples: text(r[19]),
+      showLink: text(r[20]),
+      synopsisLink: text(r[21]),
+      notes: text(r[22]),
+      finalRendersLink: text(r[26]),
+      projectFilesLink: text(r[27]),
+      assetsLink: text(r[28]),
+      perMin: num(r[29]),
+      promoCost: num(r[31]),
+      paymentStatus:
+        pay === "Paid" || pay === "Paid Partially" || pay === "Unpaid" ? pay : null,
+    });
+  }
+  return map;
+}
+
+/** Fill empty promo link fields from the Master Sheet. Does not replace tracker status. */
+export function applyMasterDetail(promo: Promo, detail: Partial<Promo>) {
+  const fill = <K extends keyof Promo>(key: K) => {
+    const incoming = detail[key];
+    if (incoming == null || incoming === "") return;
+    const current = promo[key];
+    if (current == null || current === "" || current === false) {
+      promo[key] = incoming as Promo[K];
+    }
+  };
+  if (detail.finalAssetLengthSec) promo.finalAssetLengthSec = detail.finalAssetLengthSec;
+  fill("masterStage");
+  fill("canvasCompletionTimeline");
+  fill("canvasStatus");
+  fill("fiveMinTimeline");
+  fill("krockLink5Min");
+  fill("completeDeliverable");
+  fill("deliverableWithFinalCorrections");
+  fill("finalCorrectedFiles");
+  fill("comments");
+  fill("scriptLink");
+  fill("canvasLink");
+  fill("voSamples");
+  fill("videoSamples");
+  fill("showLink");
+  fill("synopsisLink");
+  fill("notes");
+  fill("finalRendersLink");
+  fill("projectFilesLink");
+  fill("assetsLink");
+  fill("perMin");
+  fill("promoCost");
+  fill("paymentStatus");
+}
+
 /** Promo stub for an asset-sheet row that isn't on Master Tracker yet. */
 export function stubPromoFromAsset(showName: string, scriptName: string, row: AssetTeamRow): Promo {
   const show = showName || "";
