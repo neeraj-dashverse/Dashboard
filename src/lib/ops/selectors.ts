@@ -195,12 +195,80 @@ export function promoRecords(snap: OpsSnapshot): PromoRecord[] {
     });
   }
 
-  return records.sort((a, b) => {
-    if (a.closedOn && b.closedOn) return b.closedOn.localeCompare(a.closedOn);
-    if (a.closedOn) return -1;
-    if (b.closedOn) return 1;
-    return a.showName.localeCompare(b.showName) || a.promoName.localeCompare(b.promoName);
+  return collapsePromoRecords(records);
+}
+
+function normPromoName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+/** One card per show+promo. Closed and open runs, and near-duplicate sheet names, fold together. */
+function collapsePromoRecords(records: PromoRecord[]): PromoRecord[] {
+  const groups = new Map<string, PromoRecord[]>();
+  for (const record of records) {
+    const key = record.id.split("#")[0];
+    const list = groups.get(key) ?? [];
+    list.push(record);
+    groups.set(key, list);
+  }
+
+  const merged = [...groups.values()].map((group) => {
+    const primary =
+      group.find((record) => record.parts.length && !/closed|delivered/i.test(record.status)) ??
+      group.find((record) => record.parts.length) ??
+      group[0];
+    const parts = new Map<number, PromoPartRecord>();
+    for (const record of group) {
+      for (const part of record.parts) {
+        const prev = parts.get(part.partNo);
+        if (!prev || (part.closedOn && (!prev.closedOn || part.closedOn > prev.closedOn))) {
+          parts.set(part.partNo, part);
+        }
+      }
+    }
+    const closedOn =
+      group
+        .map((record) => record.closedOn)
+        .filter((date): date is string => !!date)
+        .sort()
+        .at(-1) ?? null;
+    const partList = [...parts.values()].sort((a, b) => a.partNo - b.partNo);
+    const lengths = partList.map((part) => part.lengthSec).filter((seconds) => seconds > 0);
+    return {
+      ...primary,
+      id: primary.id.split("#")[0],
+      parts: partList,
+      closedOn,
+      finalSec: lengths.length
+        ? lengths.reduce((sum, seconds) => sum + seconds, 0)
+        : primary.finalSec,
+      initialSec: group.find((record) => record.initialSec)?.initialSec ?? primary.initialSec,
+      assetPeople: group.find((record) => record.assetPeople)?.assetPeople ?? primary.assetPeople,
+      assetDays: group.find((record) => record.assetDays != null)?.assetDays ?? primary.assetDays,
+    };
   });
+
+  const named = new Set(
+    merged
+      .filter((record) => record.parts.length > 0)
+      .flatMap((record) => [normPromoName(record.showName), normPromoName(record.promoName)])
+      .filter((name) => name.length > 3)
+  );
+
+  return merged
+    .filter((record) => {
+      if (record.parts.length > 0) return true;
+      const show = normPromoName(record.showName);
+      const promo = normPromoName(record.promoName);
+      if ((show && named.has(show)) || (promo && named.has(promo))) return false;
+      return Boolean(record.initialSec || record.closedOn || record.assetPeople || record.finalSec);
+    })
+    .sort((a, b) => {
+      if (a.closedOn && b.closedOn) return b.closedOn.localeCompare(a.closedOn);
+      if (a.closedOn) return -1;
+      if (b.closedOn) return 1;
+      return a.showName.localeCompare(b.showName) || a.promoName.localeCompare(b.promoName);
+    });
 }
 
 export function partLabel(snap: OpsSnapshot, part: Part): string {

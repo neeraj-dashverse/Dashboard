@@ -3,59 +3,77 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { formatDmy, formatDuration, STAGE_LABEL } from "@/lib/ops/selectors";
-import type { Part } from "@/lib/ops/types";
+import type { Part, Promo, QualityReview } from "@/lib/ops/types";
 import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
 
-function date(value: string | null | undefined): string {
-  if (!value) return "";
-  return formatDmy(value);
+function duration(seconds: number | null | undefined): string {
+  if (seconds == null || seconds <= 0) return "";
+  return formatDuration(seconds);
 }
 
-function Row({ label, value }: { label: string; value: string | number | null | undefined }) {
+function when(value: string | null | undefined): string {
+  if (!value) return "";
+  return /^\d{4}-\d{2}-\d{2}/.test(value) ? formatDmy(value) : value;
+}
+
+function Chip({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+}) {
   const text = value == null || value === "" ? "" : String(value);
-  if (!text || text === "—") return null;
-  const href = /^https?:\/\//i.test(text) ? text : null;
+  if (!text) return null;
   return (
-    <div className="grid gap-1 border-b border-white/[0.05] py-2 sm:grid-cols-[180px_1fr] sm:gap-3">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      {href ? (
-        <a href={href} target="_blank" rel="noreferrer" className="break-all text-[13px] text-[#9bb0ff] hover:underline">
-          {text}
-        </a>
-      ) : (
-        <p className="whitespace-pre-wrap text-[13px] text-slate-200">{text}</p>
-      )}
+    <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[12px] text-slate-200">
+      <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+      <span className="mt-0.5 block max-w-[220px] truncate">{text}</span>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="rounded-xl border border-white/[0.08] bg-[#121216] p-4">
-      <h2 className="text-[13px] font-bold text-white">{title}</h2>
-      <div className="mt-2">{children}</div>
-    </section>
-  );
+function uniqueParts(parts: Part[]): Part[] {
+  const byNo = new Map<number, Part>();
+  for (const part of parts) {
+    const prev = byNo.get(part.partNo);
+    if (!prev) {
+      byNo.set(part.partNo, part);
+      continue;
+    }
+    const prevClose = prev.soundEndDate ?? prev.correctionEndDate ?? "";
+    const nextClose = part.soundEndDate ?? part.correctionEndDate ?? "";
+    if (nextClose > prevClose || (!prev.artist && part.artist)) byNo.set(part.partNo, part);
+  }
+  return [...byNo.values()].sort((a, b) => a.partNo - b.partNo);
+}
+
+function krockButtons(reviews: QualityReview[], partNo: number) {
+  const seen = new Set<string>();
+  const out: { url: string; pass: string }[] = [];
+  for (const review of reviews) {
+    if (review.partNo !== partNo || !review.krockLink) continue;
+    if (seen.has(review.krockLink)) continue;
+    seen.add(review.krockLink);
+    out.push({ url: review.krockLink, pass: review.versionCorrection ?? "" });
+  }
+  return out;
 }
 
 export function RecordDetail({ promoId }: { promoId: string }) {
   const { snap } = useOps();
+  const base = promoId.split("#")[0];
   const promo =
     snap.promos.find((item) => item.id === promoId) ??
-    snap.promos.find((item) => item.id.split("#")[0] === promoId);
-  const parts = snap.parts
-    .filter((part) => part.promoId === (promo?.id ?? promoId) || part.promoId === promoId.split("#")[0])
-    .sort((a, b) => a.partNo - b.partNo);
-  const reviews = snap.qualityReviews.filter(
-    (review) => review.promoId === (promo?.id.split("#")[0] ?? promoId.split("#")[0])
+    snap.promos.find((item) => item.id === base) ??
+    snap.promos.find((item) => item.id.split("#")[0] === base);
+  const parts = uniqueParts(
+    snap.parts.filter((part) => part.promoId === base || part.promoId === promo?.id)
   );
-  const remarks = snap.planRemarks.filter(
-    (remark) => remark.promoId === (promo?.id.split("#")[0] ?? promoId.split("#")[0])
-  );
-  const plans = snap.plannerCells.filter(
-    (cell) => cell.promoId === (promo?.id.split("#")[0] ?? promoId.split("#")[0])
-  );
+  const reviews = snap.qualityReviews.filter((review) => review.promoId === base);
+  const remarks = snap.planRemarks.filter((remark) => remark.promoId === base);
+  const plans = snap.plannerCells.filter((cell) => cell.promoId === base);
 
   if (!promo && parts.length === 0) {
     return (
@@ -68,184 +86,266 @@ export function RecordDetail({ promoId }: { promoId: string }) {
     );
   }
 
-  const show = promo?.showName || parts[0]?.promoId.split("|")[0] || "Promo";
-  const name = promo?.promoName || parts[0]?.promoId.split("|")[1] || "";
+  const show = promo?.showName || "Promo";
+  const name = promo?.promoName || "";
   const asset = promo?.assetTeam;
   const pre = promo?.preProd;
+  const links = uniqueLinks(promo);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <Link href="/record" className="text-[12px] font-semibold text-[#9bb0ff] hover:underline">
-          ← Record
-        </Link>
-        <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-white">
-          {show}
-          {name ? <span className="text-slate-400"> · {name}</span> : null}
-        </h1>
-        <p className="mt-1 text-[12px] text-slate-500">
-          {[promo?.trackerStatus, promo?.cps ? `Cps ${promo.cps}` : "", promo?.priority]
-            .filter(Boolean)
-            .join(" · ") || "From the sheets"}
-        </p>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <Link href="/record" className="text-[12px] font-semibold text-[#9bb0ff] hover:underline">
+            ← Record
+          </Link>
+          <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-white">{show}</h1>
+          {name && <p className="text-[14px] text-slate-400">{name}</p>}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {promo?.trackerStatus && <Pill>{promo.trackerStatus}</Pill>}
+          {promo?.cps && <Pill>Cps {promo.cps}</Pill>}
+          {promo?.priority && <Pill>{promo.priority}</Pill>}
+        </div>
       </div>
       <SyncStrip />
 
-      <Section title="Links">
-        <Row label="Krock · 5 min" value={promo?.krockLink5Min} />
-        <Row label="Final renders" value={promo?.finalRendersLink} />
-        <Row label="Project files" value={promo?.projectFilesLink} />
-        <Row label="Final corrected files" value={promo?.finalCorrectedFiles} />
-        <Row label="Assets" value={promo?.assetsLink} />
-        <Row label="Asset map" value={asset?.assetMapLink} />
-        <Row label="Asset canvas" value={asset?.assetCanvasLink} />
-        <Row label="Assets drive" value={asset?.assetsDriveLink} />
-        <Row label="Canvas" value={promo?.canvasLink} />
-        <Row label="Script" value={promo?.workingScriptLink || promo?.scriptLink} />
-        <Row label="Agency script" value={promo?.agencyScriptLink} />
-        <Row label="Demarcated script" value={promo?.demarcatedScriptLink} />
-        <Row label="Show link" value={promo?.showLink} />
-        <Row label="Synopsis" value={promo?.synopsisLink || asset?.synopsis} />
-        <Row label="VO samples" value={promo?.voSamples} />
-        <Row label="Video samples" value={promo?.videoSamples} />
-      </Section>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Stat label="Initial" value={duration(promo?.initialDurationSec) || "—"} />
+        <Stat label="Final" value={duration(promo?.finalAssetLengthSec) || sumLength(parts) || "—"} />
+        <Stat label="Parts" value={String(parts.length || "—")} />
+        <Stat
+          label="Assets"
+          value={asset?.totalDays != null ? `${asset.totalDays} days` : pre?.status || "—"}
+        />
+      </div>
 
-      <Section title="Promo">
-        <Row label="Status" value={promo?.trackerStatus || promo?.status} />
-        <Row label="Master stage" value={promo?.masterStage} />
-        <Row label="Canvas status" value={promo?.canvasStatus} />
-        <Row label="Initial duration" value={duration(promo?.initialDurationSec)} />
-        <Row label="Final asset length" value={duration(promo?.finalAssetLengthSec)} />
-        <Row label="5 min timeline" value={date(promo?.fiveMinTimeline)} />
-        <Row label="5 min status" value={promo?.fiveMinStatus} />
-        <Row label="Complete deliverable" value={date(promo?.completeDeliverable) || promo?.completeDeliverable} />
-        <Row label="Final corrections" value={promo?.deliverableWithFinalCorrections} />
-        <Row label="Per min" value={promo?.perMin} />
-        <Row label="Promo cost" value={promo?.promoCost} />
-        <Row label="Payment" value={promo?.paymentStatus} />
-        <Row label="Assets made" value={promo?.totalAssetMade} />
-        <Row label="Assets generated" value={promo?.totalAssetGenerated} />
-        <Row label="Comments" value={promo?.comments} />
-        <Row label="Notes" value={promo?.notes} />
-        <Row label="Remarks" value={promo?.remarks} />
-      </Section>
+      {links.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {links.map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full border border-[#4361ee]/30 bg-[#4361ee]/15 px-3 py-1.5 text-[12px] font-semibold text-[#d5deff] hover:bg-[#4361ee]/25"
+            >
+              {link.label}
+            </a>
+          ))}
+        </div>
+      )}
 
-      <Section title="Assets">
-        <Row label="Status" value={asset?.assetsStatus} />
-        <Row label="Artists" value={[asset?.artist1, asset?.artist2, asset?.artist3].filter(Boolean).join(", ")} />
-        <Row label="Art lead" value={asset?.artLead} />
-        <Row label="Start" value={date(asset?.startDate)} />
-        <Row label="End" value={date(asset?.endDate)} />
-        <Row label="Total days" value={asset?.totalDays} />
-        <Row label="Corrections start" value={date(asset?.correctionsStartDate)} />
-        <Row label="Corrections end" value={date(asset?.correctionsEndDate)} />
-        <Row label="Correction days" value={asset?.correctionsTotalDays} />
-        <Row label="Production days" value={asset?.productionDays} />
-        <Row label="Asset count" value={asset?.assetsCount} />
-        <Row label="Costing" value={asset?.costing} />
-        <Row label="Remarks" value={asset?.remarks} />
-        <Row label="Dashverse notes" value={asset?.dashverseNotes} />
-        <Row label="Notes" value={asset?.notes} />
-      </Section>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <InfoCard
+          title="Assets"
+          lines={[
+            asset?.assetsStatus,
+            [asset?.artist1, asset?.artist2, asset?.artist3, asset?.artLead].filter(Boolean).join(", "),
+            asset?.startDate || asset?.endDate
+              ? `${when(asset?.startDate) || "—"} → ${when(asset?.endDate) || "—"}`
+              : "",
+            asset?.correctionsEndDate ? `Corrections closed ${when(asset.correctionsEndDate)}` : "",
+            asset?.assetsCount,
+          ]}
+          note={[asset?.remarks, asset?.dashverseNotes].filter(Boolean).join("\n")}
+        />
+        <InfoCard
+          title="Pre-production"
+          lines={[
+            pre?.status,
+            pre?.artist,
+            pre?.totalAssets != null ? `${pre.totalAssets} assets` : "",
+            pre?.plannedDate ? `Planned ${when(pre.plannedDate)}` : "",
+            pre?.closedDate ? `Closed ${when(pre.closedDate)}` : "",
+          ]}
+          note={pre?.remarksLog.map((entry) => entry.body).join("\n") ?? ""}
+        />
+      </div>
 
-      <Section title="Pre-production">
-        <Row label="Status" value={pre?.status} />
-        <Row label="Artist" value={pre?.artist} />
-        <Row label="Total assets" value={pre?.totalAssets} />
-        <Row label="Start" value={date(pre?.startDate)} />
-        <Row label="Planned" value={date(pre?.plannedDate)} />
-        <Row label="Closed" value={date(pre?.closedDate)} />
-        <Row label="Assets needed by" value={date(pre?.assetsNeededBy)} />
-        <Row label="Remarks" value={pre?.remarksLog.map((entry) => entry.body).join("\n")} />
-      </Section>
-
-      <Section title="Parts">
+      <section className="space-y-2">
+        <h2 className="text-[13px] font-bold text-white">Parts</h2>
         {parts.length === 0 ? (
           <p className="text-[12px] text-slate-500">No production parts.</p>
         ) : (
-          <div className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-2">
             {parts.map((part) => (
-              <PartBlock key={part.id} part={part} krocks={krocksFor(reviews, part.partNo)} />
+              <article key={part.partNo} className="rounded-xl border border-white/[0.08] bg-[#121216] p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-[15px] font-bold text-white">Part {part.partNo}</p>
+                  <Pill>
+                    {STAGE_LABEL[part.stage]}
+                    {part.team === "agency" ? " · Agency" : ""}
+                  </Pill>
+                </div>
+                <p className="mt-2 text-[13px] text-slate-200">
+                  {part.artist || "No artist"}
+                  {part.editors ? <span className="text-slate-500"> · {part.editors}</span> : null}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Chip label="Length" value={duration(part.durationSec)} />
+                  <Chip label="Worked" value={duration(part.workedDurationSec)} />
+                  <Chip label="Days" value={part.days} />
+                  <Chip label="Animation" value={span(part.aniStartDate, part.aniCloseDate)} />
+                  <Chip label="Edit" value={when(part.editCloseDate)} />
+                  <Chip label="Correction" value={span(part.correctionStartDate, part.correctionEndDate)} />
+                  <Chip label="Sound" value={when(part.soundEndDate)} />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {krockButtons(reviews, part.partNo).map((krock) => (
+                    <a
+                      key={krock.url}
+                      href={krock.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full bg-white/[0.06] px-3 py-1 text-[11px] font-semibold text-[#9bb0ff] hover:bg-white/[0.1]"
+                    >
+                      Krock{krock.pass ? ` · ${krock.pass}` : ""}
+                    </a>
+                  ))}
+                </div>
+                {part.remarks && <p className="mt-3 text-[12px] leading-5 text-slate-400">{part.remarks}</p>}
+              </article>
             ))}
           </div>
         )}
-      </Section>
+      </section>
 
-      {(plans.length > 0 || remarks.length > 0) && (
-        <Section title="Plan">
-          {plans.map((cell) => (
-            <Row
-              key={`${cell.partNo}-${cell.date}-${cell.text}`}
-              label={cell.partNo ? `P${cell.partNo}` : "Assets"}
-              value={`${date(cell.date)} · ${cell.text}`}
-            />
-          ))}
-          {remarks.map((remark) => (
-            <Row
-              key={`${remark.partNo}-${remark.at}-${remark.body}`}
-              label={remark.partNo ? `P${remark.partNo} remark` : "Remark"}
-              value={remark.body}
-            />
-          ))}
-        </Section>
+      {(plans.length > 0 || remarks.length > 0 || promo?.remarks || promo?.notes || promo?.comments) && (
+        <section className="rounded-xl border border-white/[0.08] bg-[#121216] p-4">
+          <h2 className="text-[13px] font-bold text-white">Notes and plan</h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {uniquePlans(plans).map((cell) => (
+              <Chip
+                key={`${cell.partNo}-${cell.date}-${cell.text}`}
+                label={cell.partNo ? `P${cell.partNo}` : "Assets"}
+                value={`${when(cell.date)} · ${cell.text}`}
+              />
+            ))}
+          </div>
+          <div className="mt-3 space-y-2">
+            {uniqueText([promo?.comments, promo?.notes, promo?.remarks, ...remarks.map((item) => item.body)]).map(
+              (text) => (
+                <p key={text} className="text-[12px] leading-5 text-slate-300">
+                  {text}
+                </p>
+              )
+            )}
+          </div>
+        </section>
       )}
     </div>
   );
 }
 
-function krocksFor(
-  reviews: { partNo: number; krockLink: string | null; versionCorrection: string | null }[],
-  partNo: number
-): string[] {
-  const links = reviews
-    .filter((review) => review.partNo === partNo && review.krockLink)
-    .map((review) =>
-      review.versionCorrection ? `${review.versionCorrection} · ${review.krockLink}` : review.krockLink!
-    );
-  return [...new Set(links)];
-}
-
-function PartBlock({
-  part,
-  krocks,
-}: {
-  part: Part;
-  krocks: string[];
-}) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-white/[0.06] p-3">
-      <p className="text-[13px] font-bold text-white">
-        Part {part.partNo}
-        <span className="ml-2 text-[12px] font-medium text-slate-400">
-          {STAGE_LABEL[part.stage]}
-          {part.status ? ` · ${part.status}` : ""}
-          {part.team === "agency" ? " · Agency" : ""}
-        </span>
-      </p>
-      <Row label="Artist" value={part.artist} />
-      <Row label="Editor" value={part.editors} />
-      <Row label="Length" value={duration(part.durationSec)} />
-      <Row label="Worked" value={duration(part.workedDurationSec)} />
-      <Row label="Days" value={part.days} />
-      <Row label="Deadline" value={date(part.deadline)} />
-      <Row label="Plotting" value={date(part.plannedPlottedDate)} />
-      <Row label="Animation start" value={date(part.aniStartDate)} />
-      <Row label="Animation close" value={date(part.aniCloseDate)} />
-      <Row label="Edit close" value={date(part.editCloseDate)} />
-      <Row label="Correction start" value={date(part.correctionStartDate)} />
-      <Row label="Correction end" value={date(part.correctionEndDate)} />
-      <Row label="Sound close" value={date(part.soundEndDate)} />
-      <Row label="Remarks" value={part.remarks} />
-      {krocks.map((link) => {
-        const url = link.includes("http") ? link.slice(link.indexOf("http")) : link;
-        const pass = link.includes(" · ") ? link.split(" · ")[0] : "";
-        return <Row key={link} label={pass ? `Krock · ${pass}` : "Krock"} value={url} />;
-      })}
+    <div className="rounded-xl border border-white/[0.08] bg-[#121216] px-3 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-[16px] font-bold text-white">{value}</p>
     </div>
   );
 }
 
-function duration(seconds: number | null | undefined): string {
-  if (seconds == null || seconds <= 0) return "";
-  return formatDuration(seconds);
+function Pill({ children }: { children: ReactNode }) {
+  return (
+    <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-slate-300">
+      {children}
+    </span>
+  );
+}
+
+function InfoCard({
+  title,
+  lines,
+  note,
+}: {
+  title: string;
+  lines: (string | null | undefined)[];
+  note: string;
+}) {
+  const facts = lines.map((line) => line?.trim()).filter((line): line is string => !!line);
+  const extra = note.trim();
+  if (facts.length === 0 && !extra) return null;
+  return (
+    <section className="rounded-xl border border-white/[0.08] bg-[#121216] p-4">
+      <h2 className="text-[13px] font-bold text-white">{title}</h2>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {facts.map((line) => (
+          <span key={line} className="rounded-lg bg-white/[0.04] px-2.5 py-1.5 text-[12px] text-slate-200">
+            {line}
+          </span>
+        ))}
+      </div>
+      {extra && <p className="mt-3 whitespace-pre-wrap text-[12px] leading-5 text-slate-400">{extra}</p>}
+    </section>
+  );
+}
+
+function span(start: string | null, end: string | null): string {
+  const a = when(start);
+  const b = when(end);
+  if (a && b) return `${a} → ${b}`;
+  return b || a;
+}
+
+function sumLength(parts: Part[]): string {
+  const total = parts.reduce((sum, part) => sum + (part.durationSec || 0), 0);
+  return duration(total);
+}
+
+function uniqueLinks(promo: Promo | undefined) {
+  if (!promo) return [];
+  const asset = promo.assetTeam;
+  const candidates = [
+    ["Krock 5 min", promo.krockLink5Min],
+    ["Final renders", promo.finalRendersLink],
+    ["Project files", promo.projectFilesLink],
+    ["Final files", promo.finalCorrectedFiles],
+    ["Assets", promo.assetsLink],
+    ["Asset map", asset?.assetMapLink],
+    ["Asset canvas", asset?.assetCanvasLink],
+    ["Drive", asset?.assetsDriveLink],
+    ["Canvas", promo.canvasLink],
+    ["Script", promo.workingScriptLink || promo.scriptLink],
+    ["Agency script", promo.agencyScriptLink],
+    ["Demarcated", promo.demarcatedScriptLink],
+    ["Show", promo.showLink],
+    ["VO", promo.voSamples],
+    ["Video", promo.videoSamples],
+  ] as const;
+  const seen = new Set<string>();
+  const out: { label: string; href: string }[] = [];
+  for (const [label, value] of candidates) {
+    if (!value || !/^https?:\/\//i.test(value) || seen.has(value)) continue;
+    seen.add(value);
+    out.push({ label, href: value });
+  }
+  return out;
+}
+
+function uniquePlans(
+  cells: { partNo: number; date: string; text: string }[]
+) {
+  const seen = new Set<string>();
+  return cells.filter((cell) => {
+    const key = `${cell.partNo}|${cell.date}|${cell.text.trim().toLowerCase()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function uniqueText(values: (string | null | undefined)[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const text = value?.trim();
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+  }
+  return out;
 }
