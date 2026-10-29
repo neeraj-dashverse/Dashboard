@@ -614,7 +614,7 @@ function currentDoing(row: PlannerRow, today: string, tab: PlannerTab): string {
 
 /**
  * Ongoing calendar work, split by assets, in-house animators, editors, and agency.
- * Each open row says what they are doing, the plan date, and how many days it is over.
+ * Each open row says what they are doing and, if the plan date has passed, that they were supposed to be free.
  */
 export function teamGroups(snap: OpsSnapshot): TeamGroup[] {
   const buckets = new Map<TeamGroupId, Map<string, TeamPerson>>();

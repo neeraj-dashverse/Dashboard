@@ -6,6 +6,8 @@ import {
   formatDmy,
   promoFor,
   teamGroups,
+  type TeamGroupId,
+  type TeamHold,
   type TeamPerson,
 } from "@/lib/ops/selectors";
 import { Kpi, SectionTitle } from "./ui";
@@ -14,9 +16,33 @@ import { useOps } from "./OpsProvider";
 
 function whenFree(person: TeamPerson, today: string): string {
   if (!person.freeAt) return "No plan date";
-  if (person.freeAt < today) return `Not free · plan was ${formatDmy(person.freeAt)}`;
+  if (person.freeAt < today) return `Supposed to be free ${formatDmy(person.freeAt)}`;
   if (person.freeAt === today) return "Free today";
   return formatDmy(person.freeAt);
+}
+
+/** Stage this role is still responsible for, once their plan date has passed. */
+function stuckStage(group: TeamGroupId, doing: string): string | null {
+  const stage = doing.toLowerCase();
+  if (group === "editor") {
+    if (/correction/.test(stage)) return "Correction";
+    if (/edit/.test(stage)) return "Edit";
+    return null;
+  }
+  if (group === "assets") {
+    if (/correction/.test(stage)) return "Correction";
+    if (/asset/.test(stage)) return "Assets";
+    return null;
+  }
+  if (/correction/.test(stage)) return "Correction";
+  if (/anim|plot/.test(stage)) return "Animation";
+  return null;
+}
+
+function holdNotice(group: TeamGroupId, hold: TeamHold): string | null {
+  if (hold.lateDays <= 0) return null;
+  const stage = stuckStage(group, hold.doing);
+  return stage ? `Supposed to be free, still in ${stage}` : "Supposed to be free";
 }
 
 export function TeamBoard() {
@@ -39,7 +65,7 @@ export function TeamBoard() {
           Who is <span className="gradient-text">free</span>
         </h1>
         <p className="mt-1 max-w-3xl text-[12px] text-slate-500">
-          Ongoing calendar work, split by assets, animators, editors, and agency. Free on is the latest plan date. A promo still open after that date is taking more days.
+          Ongoing calendar work, split by assets, animators, editors, and agency. If a plan date has passed, the note says they were supposed to be free and which stage they are still in.
         </p>
       </div>
 
@@ -49,7 +75,11 @@ export function TeamBoard() {
         {groups.map((group) => (
           <Kpi key={group.id} label={group.label} value={group.people.length} />
         ))}
-        <Kpi label="Over plan" value={delayed} tone={delayed ? "text-rose-300" : "text-emerald-300"} />
+        <Kpi
+          label="Supposed to be free"
+          value={delayed}
+          tone={delayed ? "text-rose-300" : "text-emerald-300"}
+        />
       </div>
 
       {deadlines.length > 0 && (
@@ -112,7 +142,7 @@ export function TeamBoard() {
                 ? group.freeNow.length
                   ? `Free now: ${group.freeNow.join(", ")}`
                   : "No one in this group is free right now."
-                : "Each open promo shows the current stage, the plan date, and extra days if that plan has passed."
+                : "If the plan date has passed, the note says the stage they are still in."
             }
           />
           {group.people.length === 0 ? (
@@ -124,15 +154,17 @@ export function TeamBoard() {
               <table className="w-full table-fixed text-left text-[13px]">
                 <thead className="bg-white/[0.03] text-[10px] uppercase tracking-wider text-slate-500">
                   <tr>
-                    <th className="w-[18%] px-4 py-3 font-semibold">Person</th>
-                    <th className="w-[42%] px-4 py-3 font-semibold">Doing now</th>
-                    <th className="w-[20%] px-4 py-3 font-semibold">Free on</th>
-                    <th className="w-[20%] px-4 py-3 font-semibold">Over plan</th>
+                    <th className="w-[16%] px-4 py-3 font-semibold">Person</th>
+                    <th className="w-[34%] px-4 py-3 font-semibold">Doing now</th>
+                    <th className="w-[18%] px-4 py-3 font-semibold">Free on</th>
+                    <th className="w-[32%] px-4 py-3 font-semibold">Notice</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.05]">
                   {group.people.map((person) =>
-                    person.holds.map((hold, index) => (
+                    person.holds.map((hold, index) => {
+                      const notice = holdNotice(group.id, hold);
+                      return (
                       <tr key={`${person.name}-${hold.title}`} className="align-top hover:bg-white/[0.02]">
                         {index === 0 && (
                           <td rowSpan={person.holds.length} className="px-4 py-3 font-medium text-white">
@@ -164,19 +196,16 @@ export function TeamBoard() {
                             {whenFree(person, snap.today)}
                           </td>
                         )}
-                        <td
-                          className={`px-4 py-3 text-[12px] font-semibold ${
-                            hold.lateDays > 0 ? "text-rose-300" : "text-emerald-300/80"
-                          }`}
-                        >
-                          {hold.lateDays > 0
-                            ? `${hold.lateDays} more day${hold.lateDays === 1 ? "" : "s"}`
-                            : hold.until
-                              ? "On plan"
-                              : "No plan date"}
+                        <td className="px-4 py-3 text-[12px] leading-snug">
+                          {notice ? (
+                            <span className="font-semibold text-rose-200">{notice}</span>
+                          ) : (
+                            <span className="text-slate-500">{hold.until ? "As planned" : "No plan date"}</span>
+                          )}
                         </td>
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </tbody>
               </table>
