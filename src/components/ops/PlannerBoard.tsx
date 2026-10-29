@@ -274,7 +274,7 @@ export function PlannerBoard() {
           finished that day
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="rounded bg-rose-500/20 px-1.5 py-0.5 font-semibold text-rose-100 ring-1 ring-rose-400/70">
+          <span className="rounded bg-rose-400/35 px-1.5 py-0.5 font-semibold text-rose-100">
             Delay
           </span>
           box in red
@@ -445,7 +445,7 @@ function Grid({
             const dayClass = (d: string, delayed: boolean) =>
               `${DAY_COL} border-b border-white/[0.05] p-1 align-middle ${
                 delayed
-                  ? "bg-rose-500/55"
+                  ? "bg-rose-400/32"
                   : isHoliday(d)
                     ? "bg-[repeating-linear-gradient(135deg,rgba(245,158,11,0.07)_0_6px,transparent_6px_12px)]"
                     : d === snapToday
