@@ -227,7 +227,7 @@ export function PlannerBoard() {
         ))}
         <span className="flex items-center gap-1.5">
           <span className="rounded border border-dashed border-white/30 px-1.5 py-0.5 font-semibold text-slate-200">
-            Plan
+            Planned
           </span>
           date you set
         </span>
@@ -498,16 +498,11 @@ function Grid({
                       }`}
                     >
                       <div className="min-h-[34px] space-y-1">
-                        {r.planMarks
-                          .filter((m) => m.date === d)
-                          .map((m) => (
-                            <div
-                              key={m.note}
-                              className={`rounded border border-dashed border-white/20 px-1.5 py-0.5 text-[10px] font-semibold leading-tight ${chipClass(m.note)}`}
-                            >
-                              Plan · {m.note}
-                            </div>
-                          ))}
+                        {r.planMarks.some((m) => m.date === d) && (
+                          <div className="rounded border border-dashed border-white/30 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-slate-200">
+                            Planned
+                          </div>
+                        )}
                         {lanes
                           .filter(
                             (l) => !r.planMarks.some((m) => m.date === d && m.note.startsWith(l.label))
