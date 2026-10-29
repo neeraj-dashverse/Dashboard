@@ -58,7 +58,7 @@ const STAGE_SOLID: Record<string, string> = {
 };
 
 function plannedLabel(note: string): string {
-  if (/rough cut|first cut|first animation|first edit/i.test(note)) return "Planned rough cut";
+  if (/rough cut|first cut|first animation|first edit/i.test(note)) return "Planned first cut";
   if (/final cut|second cut|correction/i.test(note)) return "Planned final cut";
   if (/sound/i.test(note)) return "Planned sound";
   if (/asset/i.test(note)) return "Planned assets";
@@ -235,7 +235,7 @@ export function PlannerBoard() {
         ))}
         <span className="flex items-center gap-1.5">
           <span className="rounded border border-dashed border-white/30 px-1.5 py-0.5 font-semibold text-slate-200">
-            Planned rough cut
+            Planned first cut
           </span>
           date you set
         </span>
