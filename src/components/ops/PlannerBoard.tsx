@@ -7,6 +7,7 @@ import {
   dayLanes,
   formatDmy,
   isHoliday,
+  missedPlanDate,
   plannerDays,
   plannerPreprodRows,
   plannerRows,
@@ -445,7 +446,7 @@ function Grid({
             const dayClass = (d: string, delayed: boolean) =>
               `${DAY_COL} border-b border-white/[0.05] p-1 align-middle ${
                 delayed
-                  ? "bg-rose-400/32"
+                  ? "bg-rose-400/40"
                   : isHoliday(d)
                     ? "bg-[repeating-linear-gradient(135deg,rgba(245,158,11,0.07)_0_6px,transparent_6px_12px)]"
                     : d === snapToday
@@ -585,10 +586,8 @@ function Grid({
                     const lanes = dayLanes(r, d, snapToday, tab).filter(
                       (l) => !holiday || l.closed
                     );
-                    const delayed =
-                      !!r.plannedDate &&
-                      d > r.plannedDate &&
-                      lanes.some((l) => l.timing === "late");
+                    const missed = missedPlanDate(r, snapToday, tab);
+                    const delayed = !!missed && d > missed && d <= snapToday && lanes.length > 0;
                     return (
                       <td key={d} className={dayClass(d, delayed)}>
                         <div className="min-h-[28px] space-y-1">{lanes.map(laneChip)}</div>

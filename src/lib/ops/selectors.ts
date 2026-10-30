@@ -1077,6 +1077,31 @@ export function dayLanes(
   return [{ ...prod, timing: vsPlan(row.plannedDate, row.part.aniCloseDate, today) }];
 }
 
+/**
+ * The plan date this open row has already missed.
+ * Animation/plotting uses the rough-cut plan, edit and correction use the final-cut plan,
+ * sound uses the sound plan. Delay then runs from the next day through today.
+ */
+export function missedPlanDate(row: PlannerRow, today: string, tab: PlannerTab): string | null {
+  const marks = [...row.planMarks].sort((a, b) => a.date.localeCompare(b.date));
+  const first = (re: RegExp) => marks.find((mark) => re.test(mark.note))?.date ?? null;
+
+  if (tab === "preprod") {
+    const plan = first(/asset/i) ?? row.plannedDate;
+    return plan && plan < today ? plan : null;
+  }
+
+  const now = (dayLanes(row, today, today, tab)[0]?.label ?? row.part?.stage ?? "").toLowerCase();
+  let plan: string | null = null;
+  if (/plot|anim|planning/.test(now)) plan = first(/rough|first/) ?? row.plannedDate;
+  else if (/edit/.test(now)) plan = first(/final|correction/) ?? first(/rough|first/) ?? row.plannedDate;
+  else if (/correction/.test(now)) plan = first(/final|correction/) ?? first(/rough|first/) ?? row.plannedDate;
+  else if (/sound/.test(now)) plan = first(/sound/) ?? first(/final/) ?? row.plannedDate;
+  else plan = first(/rough|first/) ?? row.plannedDate;
+
+  return plan && plan < today ? plan : null;
+}
+
 /** First day this row's phase actually began. Pre-prod is asset start; production is plotting or ani start. */
 function phaseStartDate(row: PlannerRow, tab: PlannerTab, today: string): string | null {
   if (tab === "preprod") return assetStartDate(row.promo, today);
