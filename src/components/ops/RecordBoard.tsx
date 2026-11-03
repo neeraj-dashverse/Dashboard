@@ -11,6 +11,11 @@ function duration(seconds: number | null | undefined): string {
   return formatDuration(seconds);
 }
 
+function when(value: string | null | undefined): string {
+  if (!value) return "—";
+  return formatDmy(value);
+}
+
 export function RecordBoard() {
   const { snap } = useOps();
   const records = useMemo(() => promoRecords(snap), [snap]);
@@ -42,7 +47,7 @@ export function RecordBoard() {
         </p>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Record</h1>
         <p className="mt-1 max-w-3xl text-[12px] leading-5 text-slate-500">
-          Newest close date first. Open a card for who worked, the days, and each part.
+          List of every promo. Click the show or promo name for full details.
         </p>
       </div>
 
@@ -59,32 +64,70 @@ export function RecordBoard() {
         {shown.length} promo{shown.length === 1 ? "" : "s"}
       </p>
 
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-        {shown.map((record) => {
-          return (
-            <Link
-              key={record.id}
-              href={`/record/${encodeURIComponent(record.id)}`}
-              className="rounded-xl border border-white/[0.08] bg-[#121216] px-3 py-3 text-left hover:border-white/[0.16]"
-            >
-              <p className="truncate text-[13px] font-bold text-white">{record.showName}</p>
-              <p className="truncate text-[12px] text-slate-400">{record.promoName}</p>
-              <p className="mt-2 text-[12px] font-semibold text-slate-200">
-                {record.closedOn ? `Closed ${formatDmy(record.closedOn)}` : "Still open"}
-              </p>
-              <p className="mt-1 text-[11px] text-slate-500">
-                {record.days != null ? `${record.days} days` : "Days —"}
-                {" · Initial "}
-                {duration(record.initialSec)}
-              </p>
-              <p className="mt-1 text-[11px] text-slate-400">
-                {record.finalRendersLink ? "Final render" : "No final render"}
-                {" · "}
-                {record.projectFilesLink ? "Project files" : "No project files"}
-              </p>
-            </Link>
-          );
-        })}
+      <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
+        <table className="min-w-full border-collapse text-left text-[12px]">
+          <thead className="bg-[#121216] text-[10px] font-bold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="whitespace-nowrap px-3 py-2.5">Show</th>
+              <th className="whitespace-nowrap px-3 py-2.5">Promo</th>
+              <th className="whitespace-nowrap px-3 py-2.5">Worked</th>
+              <th className="whitespace-nowrap px-3 py-2.5">Asset start</th>
+              <th className="whitespace-nowrap px-3 py-2.5">Asset end</th>
+              <th className="whitespace-nowrap px-3 py-2.5">Animation start</th>
+              <th className="whitespace-nowrap px-3 py-2.5">Sound end</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
+                  No promos match.
+                </td>
+              </tr>
+            ) : (
+              shown.map((record) => (
+                <tr
+                  key={record.id}
+                  className="border-t border-white/[0.06] bg-[#0c0c10] hover:bg-white/[0.03]"
+                >
+                  <td className="max-w-[180px] px-3 py-2.5">
+                    <Link
+                      href={`/record/${encodeURIComponent(record.id)}`}
+                      className="block truncate font-semibold text-white hover:underline"
+                      title={record.showName}
+                    >
+                      {record.showName || "—"}
+                    </Link>
+                  </td>
+                  <td className="max-w-[200px] px-3 py-2.5">
+                    <Link
+                      href={`/record/${encodeURIComponent(record.id)}`}
+                      className="block truncate text-slate-300 hover:text-white hover:underline"
+                      title={record.promoName}
+                    >
+                      {record.promoName || "—"}
+                    </Link>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-200">
+                    {duration(record.workedSec)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-slate-300">
+                    {when(record.assetStart)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-slate-300">
+                    {when(record.assetEnd)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-slate-300">
+                    {when(record.animationStart)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-slate-300">
+                    {when(record.soundEnd)}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

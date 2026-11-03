@@ -95,12 +95,22 @@ export type PromoRecord = {
   status: string;
   /** Sum of the part lengths on Production Tracker. */
   initialSec: number | null;
+  /** Sum of Worked Duration (AF) across parts. */
+  workedSec: number | null;
   /** Final asset length on the PocketFM sheet, when that cell is filled. */
   finalSec: number | null;
   finalRendersLink: string | null;
   projectFilesLink: string | null;
   assetPeople: string;
   assetDays: number | null;
+  /** Asset sheet Start Date (Y) or Pre Production start. */
+  assetStart: string | null;
+  /** Asset close: Corrections End (AC), else End (Z), else Pre Production closed. */
+  assetEnd: string | null;
+  /** Earliest animation / plotting start across parts. */
+  animationStart: string | null;
+  /** Latest sound end across parts. */
+  soundEnd: string | null;
   days: number | null;
   /** When the promo was closed. Empty while it is still open. */
   closedOn: string | null;
@@ -158,14 +168,28 @@ export function promoRecords(snap: OpsSnapshot): PromoRecord[] {
     });
 
     const lengths = partRows.map((part) => part.lengthSec).filter((seconds) => seconds > 0);
+    const worked = partRows
+      .map((part) => part.workedSec)
+      .filter((seconds): seconds is number => seconds != null && seconds > 0);
     const starts = parts
       .map((part) => part.aniStartDate ?? part.plannedPlottedDate)
+      .filter((date): date is string => !!date)
+      .sort();
+    const soundEnds = parts
+      .map((part) => part.soundEndDate)
       .filter((date): date is string => !!date)
       .sort();
     const ends = parts
       .map((part) => part.soundEndDate ?? part.correctionEndDate ?? part.editCloseDate ?? part.aniCloseDate)
       .filter((date): date is string => !!date)
       .sort();
+    const assetStart =
+      (promo ? assetStartDate(promo, snap.today) : null) ??
+      toIsoLoose(promo?.preProd?.startDate);
+    const assetEnd =
+      (promo ? assetClosedDate(promo) : null) ??
+      toIsoLoose(asset?.endDate) ??
+      toIsoLoose(promo?.preProd?.closedDate);
     const delivered = parts.length > 0 && parts.every((part) => part.stage === "delivered");
     const status =
       promo?.trackerStatus || promo?.status || (delivered ? "Delivered" : parts.length ? "WIP" : "—");
@@ -186,11 +210,16 @@ export function promoRecords(snap: OpsSnapshot): PromoRecord[] {
       promoName: promo?.promoName || nameFallback || "—",
       status,
       initialSec: lengths.length ? lengths.reduce((sum, seconds) => sum + seconds, 0) : null,
+      workedSec: worked.length ? worked.reduce((sum, seconds) => sum + seconds, 0) : null,
       finalSec: promo?.finalAssetLengthSec ?? null,
       finalRendersLink: promo?.finalRendersLink ?? null,
       projectFilesLink: promo?.projectFilesLink ?? null,
       assetPeople,
       assetDays,
+      assetStart,
+      assetEnd,
+      animationStart: starts[0] ?? null,
+      soundEnd: soundEnds[soundEnds.length - 1] ?? null,
       days: daySpan(starts[0], ends[ends.length - 1]) ?? assetDays,
       closedOn,
       parts: partRows,
@@ -236,12 +265,32 @@ function collapsePromoRecords(records: PromoRecord[]): PromoRecord[] {
         .at(-1) ?? null;
     const partList = [...parts.values()].sort((a, b) => a.partNo - b.partNo);
     const lengths = partList.map((part) => part.lengthSec).filter((seconds) => seconds > 0);
+    const worked = partList
+      .map((part) => part.workedSec)
+      .filter((seconds): seconds is number => seconds != null && seconds > 0);
+    const animationStarts = group
+      .map((record) => record.animationStart)
+      .filter((date): date is string => !!date)
+      .sort();
+    const soundEnds = group
+      .map((record) => record.soundEnd)
+      .filter((date): date is string => !!date)
+      .sort();
+    const assetStarts = group
+      .map((record) => record.assetStart)
+      .filter((date): date is string => !!date)
+      .sort();
+    const assetEnds = group
+      .map((record) => record.assetEnd)
+      .filter((date): date is string => !!date)
+      .sort();
     return {
       ...primary,
       id: primary.id.split("#")[0],
       parts: partList,
       closedOn,
       initialSec: lengths.length ? lengths.reduce((sum, seconds) => sum + seconds, 0) : null,
+      workedSec: worked.length ? worked.reduce((sum, seconds) => sum + seconds, 0) : null,
       finalSec: group.find((record) => record.finalSec)?.finalSec ?? primary.finalSec,
       finalRendersLink:
         group.find((record) => record.finalRendersLink)?.finalRendersLink ?? primary.finalRendersLink,
@@ -249,6 +298,10 @@ function collapsePromoRecords(records: PromoRecord[]): PromoRecord[] {
         group.find((record) => record.projectFilesLink)?.projectFilesLink ?? primary.projectFilesLink,
       assetPeople: group.find((record) => record.assetPeople)?.assetPeople ?? primary.assetPeople,
       assetDays: group.find((record) => record.assetDays != null)?.assetDays ?? primary.assetDays,
+      assetStart: assetStarts[0] ?? null,
+      assetEnd: assetEnds[assetEnds.length - 1] ?? null,
+      animationStart: animationStarts[0] ?? null,
+      soundEnd: soundEnds[soundEnds.length - 1] ?? null,
     };
   });
 

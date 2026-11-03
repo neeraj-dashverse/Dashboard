@@ -91,6 +91,17 @@ export function RecordDetail({ promoId }: { promoId: string }) {
   const asset = promo?.assetTeam;
   const pre = promo?.preProd;
   const links = uniqueLinks(promo);
+  const assetStart = when(asset?.startDate || pre?.startDate);
+  const assetEnd = when(asset?.correctionsEndDate || asset?.endDate || pre?.closedDate);
+  const animationStarts = parts
+    .map((part) => part.aniStartDate ?? part.plannedPlottedDate)
+    .filter((date): date is string => !!date)
+    .sort();
+  const soundEnds = parts
+    .map((part) => part.soundEndDate)
+    .filter((date): date is string => !!date)
+    .sort();
+  const workedTotal = parts.reduce((sum, part) => sum + (part.workedDurationSec || 0), 0);
 
   return (
     <div className="space-y-5">
@@ -110,7 +121,12 @@ export function RecordDetail({ promoId }: { promoId: string }) {
       </div>
       <SyncStrip />
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        <Stat label="Total worked" value={duration(workedTotal) || "—"} />
+        <Stat label="Asset start" value={assetStart || "—"} />
+        <Stat label="Asset end" value={assetEnd || "—"} />
+        <Stat label="Animation start" value={when(animationStarts[0]) || "—"} />
+        <Stat label="Sound end" value={when(soundEnds[soundEnds.length - 1]) || "—"} />
         <Stat label="Initial from parts" value={sumLength(parts) || "—"} />
         <Stat label="Parts" value={String(parts.length || "—")} />
         <Stat
