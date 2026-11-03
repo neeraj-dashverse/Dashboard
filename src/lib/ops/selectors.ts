@@ -107,8 +107,10 @@ export type PromoRecord = {
   assetStart: string | null;
   /** Asset close: Corrections End (AC), else End (Z), else Pre Production closed. */
   assetEnd: string | null;
-  /** Earliest animation / plotting start across parts. */
+  /** Earliest animation start (column M) across parts. */
   animationStart: string | null;
+  /** Latest correction end (column T) across parts. */
+  productionEnd: string | null;
   /** Latest sound end across parts. */
   soundEnd: string | null;
   days: number | null;
@@ -172,7 +174,11 @@ export function promoRecords(snap: OpsSnapshot): PromoRecord[] {
       .map((part) => part.workedSec)
       .filter((seconds): seconds is number => seconds != null && seconds > 0);
     const starts = parts
-      .map((part) => part.aniStartDate ?? part.plannedPlottedDate)
+      .map((part) => part.aniStartDate)
+      .filter((date): date is string => !!date)
+      .sort();
+    const correctionEnds = parts
+      .map((part) => part.correctionEndDate)
       .filter((date): date is string => !!date)
       .sort();
     const soundEnds = parts
@@ -219,6 +225,7 @@ export function promoRecords(snap: OpsSnapshot): PromoRecord[] {
       assetStart,
       assetEnd,
       animationStart: starts[0] ?? null,
+      productionEnd: correctionEnds[correctionEnds.length - 1] ?? null,
       soundEnd: soundEnds[soundEnds.length - 1] ?? null,
       days: daySpan(starts[0], ends[ends.length - 1]) ?? assetDays,
       closedOn,
@@ -272,6 +279,10 @@ function collapsePromoRecords(records: PromoRecord[]): PromoRecord[] {
       .map((record) => record.animationStart)
       .filter((date): date is string => !!date)
       .sort();
+    const productionEnds = group
+      .map((record) => record.productionEnd)
+      .filter((date): date is string => !!date)
+      .sort();
     const soundEnds = group
       .map((record) => record.soundEnd)
       .filter((date): date is string => !!date)
@@ -301,6 +312,7 @@ function collapsePromoRecords(records: PromoRecord[]): PromoRecord[] {
       assetStart: assetStarts[0] ?? null,
       assetEnd: assetEnds[assetEnds.length - 1] ?? null,
       animationStart: animationStarts[0] ?? null,
+      productionEnd: productionEnds[productionEnds.length - 1] ?? null,
       soundEnd: soundEnds[soundEnds.length - 1] ?? null,
     };
   });
@@ -321,9 +333,11 @@ function collapsePromoRecords(records: PromoRecord[]): PromoRecord[] {
       return Boolean(record.initialSec || record.closedOn || record.assetPeople || record.finalSec);
     })
     .sort((a, b) => {
-      if (a.closedOn && b.closedOn) return b.closedOn.localeCompare(a.closedOn);
-      if (a.closedOn) return -1;
-      if (b.closedOn) return 1;
+      if (a.assetStart && b.assetStart && a.assetStart !== b.assetStart) {
+        return b.assetStart.localeCompare(a.assetStart);
+      }
+      if (a.assetStart && !b.assetStart) return -1;
+      if (!a.assetStart && b.assetStart) return 1;
       return a.showName.localeCompare(b.showName) || a.promoName.localeCompare(b.promoName);
     });
 }

@@ -94,7 +94,11 @@ export function RecordDetail({ promoId }: { promoId: string }) {
   const assetStart = when(asset?.startDate || pre?.startDate);
   const assetEnd = when(asset?.correctionsEndDate || asset?.endDate || pre?.closedDate);
   const animationStarts = parts
-    .map((part) => part.aniStartDate ?? part.plannedPlottedDate)
+    .map((part) => part.aniStartDate)
+    .filter((date): date is string => !!date)
+    .sort();
+  const correctionEnds = parts
+    .map((part) => part.correctionEndDate)
     .filter((date): date is string => !!date)
     .sort();
   const soundEnds = parts
@@ -123,10 +127,11 @@ export function RecordDetail({ promoId }: { promoId: string }) {
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
         <Stat label="Total worked" value={duration(workedTotal) || "—"} />
-        <Stat label="Asset start" value={assetStart || "—"} />
-        <Stat label="Asset end" value={assetEnd || "—"} />
-        <Stat label="Animation start" value={when(animationStarts[0]) || "—"} />
-        <Stat label="Sound end" value={when(soundEnds[soundEnds.length - 1]) || "—"} />
+        <Stat label="Pre-production start" value={assetStart || "—"} />
+        <Stat label="Pre-production end" value={assetEnd || "—"} />
+        <Stat label="Production start" value={when(animationStarts[0]) || "—"} />
+        <Stat label="Production end" value={when(correctionEnds[correctionEnds.length - 1]) || "—"} />
+        <Stat label="Sound date" value={when(soundEnds[soundEnds.length - 1]) || "—"} />
         <Stat label="Initial from parts" value={sumLength(parts) || "—"} />
         <Stat label="Parts" value={String(parts.length || "—")} />
         <Stat
