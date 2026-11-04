@@ -1144,29 +1144,89 @@ export function dayLanes(
   return [{ ...prod, timing: vsPlan(row.plannedDate, row.part.aniCloseDate, today) }];
 }
 
-/**
- * The plan date this open row has already missed.
- * Animation/plotting uses the rough-cut plan, edit and correction use the final-cut plan,
- * sound uses the sound plan. Delay then runs from the next day through today.
- */
-export function missedPlanDate(row: PlannerRow, today: string, tab: PlannerTab): string | null {
+/** Past this many days after the cut, the calendar box turns high red. */
+export const EXTREME_DELAY_DAYS = 3;
+
+export type DelayMark = "none" | "late" | "extreme";
+
+function markDate(row: PlannerRow, re: RegExp): string | null {
   const marks = [...row.planMarks].sort((a, b) => a.date.localeCompare(b.date));
-  const first = (re: RegExp) => marks.find((mark) => re.test(mark.note))?.date ?? null;
+  return marks.find((mark) => re.test(mark.note))?.date ?? null;
+}
+
+/** The stage was not finished on the cut, and `day` is still inside that late work. */
+function openPast(close: string | null | undefined, plan: string | null, day: string): plan is string {
+  if (!plan || day <= plan) return false;
+  if (close && close <= plan) return false;
+  if (close && day > close) return false;
+  return true;
+}
+
+function delayLevel(plan: string, day: string): DelayMark {
+  return daysLate(plan, day) >= EXTREME_DELAY_DAYS ? "extreme" : "late";
+}
+
+/**
+ * Animation and edit are due on the rough cut. Correction is due on the final cut.
+ * A day after that cut is late while the stage is still unfinished. Three or more
+ * days past the cut is extreme.
+ */
+export function calendarDelay(
+  row: PlannerRow,
+  day: string,
+  today: string,
+  tab: PlannerTab
+): DelayMark {
+  if (day > today) return "none";
 
   if (tab === "preprod") {
-    const plan = first(/asset/i) ?? row.plannedDate;
-    return plan && plan < today ? plan : null;
+    const plan = markDate(row, /asset/i) ?? row.plannedDate;
+    const closed = assetClosedDate(row.promo);
+    return openPast(closed, plan, day) ? delayLevel(plan, day) : "none";
   }
 
-  const now = (dayLanes(row, today, today, tab)[0]?.label ?? row.part?.stage ?? "").toLowerCase();
-  let plan: string | null = null;
-  if (/plot|anim|planning/.test(now)) plan = first(/rough|first/) ?? row.plannedDate;
-  else if (/edit/.test(now)) plan = first(/final|correction/) ?? first(/rough|first/) ?? row.plannedDate;
-  else if (/correction/.test(now)) plan = first(/final|correction/) ?? first(/rough|first/) ?? row.plannedDate;
-  else if (/sound/.test(now)) plan = first(/sound/) ?? first(/final/) ?? row.plannedDate;
-  else plan = first(/rough|first/) ?? row.plannedDate;
+  const part = row.part;
+  if (!part) return "none";
+  const rough = markDate(row, /rough|first/) ?? row.plannedDate;
+  const finalCut = markDate(row, /final|correction/);
+  const lane = (dayLanes(row, day, today, tab)[0]?.label ?? "").toLowerCase();
 
-  return plan && plan < today ? plan : null;
+  if (/sound/.test(lane)) return "none";
+  if (/correction/.test(lane)) {
+    return openPast(part.correctionEndDate, finalCut, day) ? delayLevel(finalCut, day) : "none";
+  }
+  if (/edit/.test(lane)) {
+    return openPast(part.editCloseDate, rough, day) ? delayLevel(rough, day) : "none";
+  }
+  if (/plot|anim|planning|first/.test(lane)) {
+    return openPast(part.aniCloseDate, rough, day) ? delayLevel(rough, day) : "none";
+  }
+
+  if (openPast(part.aniCloseDate, rough, day) || openPast(part.editCloseDate, rough, day)) {
+    return delayLevel(rough, day);
+  }
+  if (openPast(part.correctionEndDate, finalCut, day)) return delayLevel(finalCut, day);
+  return "none";
+}
+
+/**
+ * The plan date this open row has already missed.
+ * Animation and edit are due on the rough cut. Correction is due on the final cut.
+ */
+export function missedPlanDate(row: PlannerRow, today: string, tab: PlannerTab): string | null {
+  if (tab === "preprod") {
+    const plan = markDate(row, /asset/i) ?? row.plannedDate;
+    return openPast(assetClosedDate(row.promo), plan, today) ? plan : null;
+  }
+  const part = row.part;
+  if (!part) return null;
+  const rough = markDate(row, /rough|first/) ?? row.plannedDate;
+  const finalCut = markDate(row, /final|correction/);
+  const now = (dayLanes(row, today, today, tab)[0]?.label ?? part.stage ?? "").toLowerCase();
+  if (/edit/.test(now)) return openPast(part.editCloseDate, rough, today) ? rough : null;
+  if (/plot|anim|planning|first/.test(now)) return openPast(part.aniCloseDate, rough, today) ? rough : null;
+  if (/correction/.test(now)) return openPast(part.correctionEndDate, finalCut, today) ? finalCut : null;
+  return null;
 }
 
 /** First day this row's phase actually began. Pre-prod is asset start; production is plotting or ani start. */

@@ -4,10 +4,11 @@ import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import {
   artistName,
+  calendarDelay,
   dayLanes,
   formatDmy,
   isHoliday,
-  missedPlanDate,
+  type DelayMark,
   plannerDays,
   plannerPreprodRows,
   plannerRows,
@@ -275,10 +276,16 @@ export function PlannerBoard() {
           finished that day
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="rounded bg-rose-400/35 px-1.5 py-0.5 font-semibold text-rose-100">
+          <span className="rounded bg-rose-400/40 px-1.5 py-0.5 font-semibold text-rose-100">
             Delay
           </span>
-          box in red
+          past the cut
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="rounded bg-red-600/80 px-1.5 py-0.5 font-semibold text-white">
+            Extreme
+          </span>
+          3 days or more
         </span>
         <span className="flex items-center gap-1.5">
           <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-semibold text-amber-100">Holiday</span>
@@ -443,15 +450,17 @@ function Grid({
               width: isAsset ? W_ASSET.status : W_PROD.status,
               minWidth: isAsset ? W_ASSET.status : W_PROD.status,
             };
-            const dayClass = (d: string, delayed: boolean) =>
+            const dayClass = (d: string, mark: DelayMark) =>
               `${DAY_COL} border-b border-white/[0.05] p-1 align-middle ${
-                delayed
-                  ? "bg-rose-400/40"
-                  : isHoliday(d)
-                    ? "bg-[repeating-linear-gradient(135deg,rgba(245,158,11,0.07)_0_6px,transparent_6px_12px)]"
-                    : d === snapToday
-                      ? "bg-[#4361ee]/[0.06]"
-                      : ""
+                mark === "extreme"
+                  ? "bg-red-600/75"
+                  : mark === "late"
+                    ? "bg-rose-400/40"
+                    : isHoliday(d)
+                      ? "bg-[repeating-linear-gradient(135deg,rgba(245,158,11,0.07)_0_6px,transparent_6px_12px)]"
+                      : d === snapToday
+                        ? "bg-[#4361ee]/[0.06]"
+                        : ""
               }`;
             return (
               <Fragment key={r.key}>
@@ -561,7 +570,7 @@ function Grid({
                     Planned
                   </td>
                   {days.map((d) => (
-                    <td key={d} className={dayClass(d, false)}>
+                    <td key={d} className={dayClass(d, "none")}>
                       <div className="min-h-[28px] space-y-1">
                         {r.planMarks
                           .filter((m) => m.date === d)
@@ -586,10 +595,9 @@ function Grid({
                     const lanes = dayLanes(r, d, snapToday, tab).filter(
                       (l) => !holiday || l.closed
                     );
-                    const missed = missedPlanDate(r, snapToday, tab);
-                    const delayed = !!missed && d > missed && d <= snapToday && lanes.length > 0;
+                    const mark = calendarDelay(r, d, snapToday, tab);
                     return (
-                      <td key={d} className={dayClass(d, delayed)}>
+                      <td key={d} className={dayClass(d, mark)}>
                         <div className="min-h-[28px] space-y-1">{lanes.map(laneChip)}</div>
                       </td>
                     );
