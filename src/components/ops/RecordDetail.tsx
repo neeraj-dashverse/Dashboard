@@ -73,7 +73,9 @@ export function RecordDetail({ promoId }: { promoId: string }) {
   );
   const reviews = snap.qualityReviews.filter((review) => review.promoId === base);
   const remarks = snap.planRemarks.filter((remark) => remark.promoId === base);
-  const plans = snap.plannerCells.filter((cell) => cell.promoId === base);
+  const plans = snap.plannerCells.filter(
+    (cell) => cell.promoId === base || cell.promoId.split("#")[0] === base || cell.promoId === promo?.id
+  );
 
   if (!promo && parts.length === 0) {
     return (
@@ -171,6 +173,40 @@ export function RecordDetail({ promoId }: { promoId: string }) {
           pre?.remarksLog.map((entry) => entry.body).join("\n"),
         ]).join("\n")}
       />
+
+      <section className="space-y-2">
+        <h2 className="text-[13px] font-bold text-white">Stage dates</h2>
+        <p className="text-[12px] text-slate-500">
+          Planned date next to the day that stage closed. Rough cut is the plan for animation and edit. Final cut is the plan for correction.
+        </p>
+        <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
+          <table className="min-w-full border-collapse text-left text-[12px]">
+            <thead className="bg-[#121216] text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="whitespace-nowrap px-3 py-2.5">Part</th>
+                <th className="whitespace-nowrap px-3 py-2.5">Stage</th>
+                <th className="whitespace-nowrap px-3 py-2.5">Planned</th>
+                <th className="whitespace-nowrap px-3 py-2.5">Closed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stageDateRows(
+                parts,
+                plans,
+                asset?.correctionsEndDate || asset?.endDate || pre?.closedDate,
+                pre?.plannedDate
+              ).map((row) => (
+                <tr key={row.key} className="border-t border-white/[0.06]">
+                  <td className="whitespace-nowrap px-3 py-2 text-slate-300">{row.part}</td>
+                  <td className="whitespace-nowrap px-3 py-2 font-semibold text-white">{row.stage}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-slate-300">{row.planned}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-slate-300">{row.closed}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="space-y-2">
         <h2 className="text-[13px] font-bold text-white">Parts</h2>
@@ -340,6 +376,56 @@ function InfoCard({
       {extra && <p className="mt-3 whitespace-pre-wrap text-[12px] leading-5 text-slate-400">{extra}</p>}
     </section>
   );
+}
+
+function planOn(
+  plans: { partNo: number; date: string; text: string }[],
+  partNo: number,
+  re: RegExp
+): string {
+  const date = plans
+    .filter((cell) => cell.partNo === partNo && re.test(cell.text))
+    .map((cell) => cell.date)
+    .sort()[0];
+  return date ? when(date) : "—";
+}
+
+function stageDateRows(
+  parts: Part[],
+  plans: { partNo: number; date: string; text: string }[],
+  assetEnd: string | null | undefined,
+  assetPlanned: string | null | undefined
+): { key: string; part: string; stage: string; planned: string; closed: string }[] {
+  const rows: { key: string; part: string; stage: string; planned: string; closed: string }[] = [
+    {
+      key: "assets",
+      part: "—",
+      stage: "Assets",
+      planned: assetPlanned ? formatDmy(assetPlanned) : "—",
+      closed: assetEnd ? formatDmy(assetEnd) : "—",
+    },
+  ];
+  for (const part of parts) {
+    const rough = planOn(plans, part.partNo, /rough cut|first cut|first animation|first edit/i);
+    const finalCut = planOn(plans, part.partNo, /final cut|second cut|correction close/i);
+    const sound = planOn(plans, part.partNo, /sound/i);
+    const label = `P${part.partNo}`;
+    rows.push(
+      { key: `${part.partNo}-ani`, part: label, stage: "Animation", planned: rough, closed: when(part.aniCloseDate) || "—" },
+      { key: `${part.partNo}-edit`, part: label, stage: "Edit", planned: rough, closed: when(part.editCloseDate) || "—" },
+      {
+        key: `${part.partNo}-cor`,
+        part: label,
+        stage: "Correction",
+        planned: finalCut,
+        closed: when(part.correctionEndDate) || "—",
+      },
+      { key: `${part.partNo}-sound`, part: label, stage: "Sound", planned: sound, closed: when(part.soundEndDate) || "—" },
+      { key: `${part.partNo}-rough`, part: label, stage: "Rough cut", planned: rough, closed: "—" },
+      { key: `${part.partNo}-final`, part: label, stage: "Final cut", planned: finalCut, closed: "—" }
+    );
+  }
+  return rows;
 }
 
 function span(start: string | null, end: string | null): string {

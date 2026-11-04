@@ -36,8 +36,8 @@ const STAGE_MAP: Record<string, PipelineStage> = {
   delivered: "delivered",
 };
 
-function toStage(raw: string | null, status: string | null): PipelineStage {
-  if (status && /^done$/i.test(status.trim())) return "delivered";
+/** Stage column only. Status "Done" does not take a part off the calendar. */
+function toStage(raw: string | null): PipelineStage {
   const s = (raw ?? "").trim().toLowerCase();
   return STAGE_MAP[s] ?? "planning";
 }
@@ -295,7 +295,7 @@ export function parseParts(rows: Grid, animatorIdByName: Map<string, string>): P
 
     const promoId = promoJoinKey(showName, promoName);
     const status = text(r[4]);
-    const stage = toStage(text(r[3]), status);
+    const stage = toStage(text(r[3]));
     const team = toTeam(r[6]);
     const artistRaw = text(r[7]);
     const names = splitNames(artistRaw);

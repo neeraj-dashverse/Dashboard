@@ -728,15 +728,14 @@ function assetPlannedDate(snap: OpsSnapshot, promo: Promo): string | null {
 }
 
 /**
- * Production tab: only promos that already have rows on Production Tracker.
- * New work stays on Pre-production until assets close and animation is added
- * to that sheet (~5–6 days later).
+ * Production calendar: every Production Tracker part whose Stage is not Delivered.
+ * Status "Done" does not remove the row.
  */
 export function plannerRows(snap: OpsSnapshot): PlannerRow[] {
   const prio = (p: Promo) => (p.priority === "P0" ? 0 : p.priority === "P1" ? 1 : 2);
   const promos = snap.promos
     .map((p, i) => ({ p, i }))
-    .filter(({ p }) => isOngoingPromo(snap, p))
+    .filter(({ p }) => snap.parts.some((part) => part.promoId === p.id && part.stage !== "delivered"))
     .sort((a, b) => prio(a.p) - prio(b.p) || a.i - b.i)
     .map(({ p }) => p);
 
