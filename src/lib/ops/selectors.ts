@@ -1186,8 +1186,8 @@ export function calendarDelay(
 
   const part = row.part;
   if (!part) return "none";
-  const rough = markDate(row, /rough|first/) ?? row.plannedDate;
-  const finalCut = markDate(row, /final|correction/);
+  const rough = markDate(row, /rough|first/i) ?? row.plannedDate;
+  const finalCut = markDate(row, /final|correction/i);
   const lane = (dayLanes(row, day, today, tab)[0]?.label ?? "").toLowerCase();
 
   if (/sound/.test(lane)) return "none";
@@ -1219,8 +1219,8 @@ export function missedPlanDate(row: PlannerRow, today: string, tab: PlannerTab):
   }
   const part = row.part;
   if (!part) return null;
-  const rough = markDate(row, /rough|first/) ?? row.plannedDate;
-  const finalCut = markDate(row, /final|correction/);
+  const rough = markDate(row, /rough|first/i) ?? row.plannedDate;
+  const finalCut = markDate(row, /final|correction/i);
   const now = (dayLanes(row, today, today, tab)[0]?.label ?? part.stage ?? "").toLowerCase();
   if (/edit/.test(now)) return openPast(part.editCloseDate, rough, today) ? rough : null;
   if (/plot|anim|planning|first/.test(now)) return openPast(part.aniCloseDate, rough, today) ? rough : null;
