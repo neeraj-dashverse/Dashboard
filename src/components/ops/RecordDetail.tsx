@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { formatDmy, formatDuration, STAGE_LABEL } from "@/lib/ops/selectors";
+import { delayDays, formatDmy, formatDuration, STAGE_LABEL } from "@/lib/ops/selectors";
 import type { AssetTeamRow, Part, PreProdAssetRow, Promo, QualityReview } from "@/lib/ops/types";
 import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
@@ -177,7 +177,7 @@ export function RecordDetail({ promoId }: { promoId: string }) {
       <section className="space-y-2">
         <h2 className="text-[13px] font-bold text-white">Stage dates</h2>
         <p className="text-[12px] text-slate-500">
-          Planned date next to the day that stage closed. Rough cut is the plan for animation and edit. Final cut is the plan for correction.
+          Planned comes from the Plan page. Closed is the sheet date for that stage. Delayed is how many days the close ran past the plan, or through today if it is still open.
         </p>
         <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
           <table className="min-w-full border-collapse text-left text-[12px]">
@@ -187,6 +187,7 @@ export function RecordDetail({ promoId }: { promoId: string }) {
                 <th className="whitespace-nowrap px-3 py-2.5">Stage</th>
                 <th className="whitespace-nowrap px-3 py-2.5">Planned</th>
                 <th className="whitespace-nowrap px-3 py-2.5">Closed</th>
+                <th className="whitespace-nowrap px-3 py-2.5">Delayed</th>
               </tr>
             </thead>
             <tbody>
@@ -194,13 +195,21 @@ export function RecordDetail({ promoId }: { promoId: string }) {
                 parts,
                 plans,
                 asset?.correctionsEndDate || asset?.endDate || pre?.closedDate,
-                pre?.plannedDate
+                pre?.plannedDate,
+                snap.today
               ).map((row) => (
                 <tr key={row.key} className="border-t border-white/[0.06]">
                   <td className="whitespace-nowrap px-3 py-2 text-slate-300">{row.part}</td>
                   <td className="whitespace-nowrap px-3 py-2 font-semibold text-white">{row.stage}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-slate-300">{row.planned}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-slate-300">{row.closed}</td>
+                  <td
+                    className={`whitespace-nowrap px-3 py-2 font-semibold ${
+                      row.delayed !== "—" && row.delayed !== "0" ? "text-rose-200" : "text-slate-300"
+                    }`}
+                  >
+                    {row.delayed === "—" || row.delayed === "0" ? row.delayed : `${row.delayed}d`}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -378,51 +387,101 @@ function InfoCard({
   );
 }
 
-function planOn(
+function planIso(
   plans: { partNo: number; date: string; text: string }[],
   partNo: number,
   re: RegExp
+): string | null {
+  return (
+    plans
+      .filter((cell) => cell.partNo === partNo && re.test(cell.text))
+      .map((cell) => cell.date)
+      .sort()[0] ?? null
+  );
+}
+
+function delayLabel(
+  planned: string | null | undefined,
+  closed: string | null | undefined,
+  today: string
 ): string {
-  const date = plans
-    .filter((cell) => cell.partNo === partNo && re.test(cell.text))
-    .map((cell) => cell.date)
-    .sort()[0];
-  return date ? when(date) : "—";
+  const days = delayDays(planned, closed, today);
+  if (days == null) return "—";
+  return String(days);
 }
 
 function stageDateRows(
   parts: Part[],
   plans: { partNo: number; date: string; text: string }[],
   assetEnd: string | null | undefined,
-  assetPlanned: string | null | undefined
-): { key: string; part: string; stage: string; planned: string; closed: string }[] {
-  const rows: { key: string; part: string; stage: string; planned: string; closed: string }[] = [
+  assetPlanned: string | null | undefined,
+  today: string
+): { key: string; part: string; stage: string; planned: string; closed: string; delayed: string }[] {
+  const show = (value: string | null | undefined) => (value ? formatDmy(value) : "—");
+  const rows: { key: string; part: string; stage: string; planned: string; closed: string; delayed: string }[] = [
     {
       key: "assets",
       part: "—",
       stage: "Assets",
-      planned: assetPlanned ? formatDmy(assetPlanned) : "—",
-      closed: assetEnd ? formatDmy(assetEnd) : "—",
+      planned: show(assetPlanned),
+      closed: show(assetEnd),
+      delayed: delayLabel(assetPlanned, assetEnd, today),
     },
   ];
   for (const part of parts) {
-    const rough = planOn(plans, part.partNo, /rough cut|first cut|first animation|first edit/i);
-    const finalCut = planOn(plans, part.partNo, /final cut|second cut|correction close/i);
-    const sound = planOn(plans, part.partNo, /sound/i);
+    const rough = planIso(plans, part.partNo, /rough cut|first cut|first animation|first edit/i);
+    const finalCut = planIso(plans, part.partNo, /final cut|second cut|correction close/i);
+    const sound = planIso(plans, part.partNo, /sound/i);
     const label = `P${part.partNo}`;
     rows.push(
-      { key: `${part.partNo}-ani`, part: label, stage: "Animation", planned: rough, closed: when(part.aniCloseDate) || "—" },
-      { key: `${part.partNo}-edit`, part: label, stage: "Edit", planned: rough, closed: when(part.editCloseDate) || "—" },
+      {
+        key: `${part.partNo}-ani`,
+        part: label,
+        stage: "Animation",
+        planned: show(rough),
+        closed: show(part.aniCloseDate),
+        delayed: delayLabel(rough, part.aniCloseDate, today),
+      },
+      {
+        key: `${part.partNo}-edit`,
+        part: label,
+        stage: "Edit",
+        planned: show(rough),
+        closed: show(part.editCloseDate),
+        delayed: delayLabel(rough, part.editCloseDate, today),
+      },
       {
         key: `${part.partNo}-cor`,
         part: label,
         stage: "Correction",
-        planned: finalCut,
-        closed: when(part.correctionEndDate) || "—",
+        planned: show(finalCut),
+        closed: show(part.correctionEndDate),
+        delayed: delayLabel(finalCut, part.correctionEndDate, today),
       },
-      { key: `${part.partNo}-sound`, part: label, stage: "Sound", planned: sound, closed: when(part.soundEndDate) || "—" },
-      { key: `${part.partNo}-rough`, part: label, stage: "Rough cut", planned: rough, closed: "—" },
-      { key: `${part.partNo}-final`, part: label, stage: "Final cut", planned: finalCut, closed: "—" }
+      {
+        key: `${part.partNo}-sound`,
+        part: label,
+        stage: "Sound",
+        planned: show(sound),
+        closed: show(part.soundEndDate),
+        delayed: delayLabel(sound, part.soundEndDate, today),
+      },
+      {
+        key: `${part.partNo}-rough`,
+        part: label,
+        stage: "Rough cut",
+        planned: show(rough),
+        closed: "—",
+        delayed: "—",
+      },
+      {
+        key: `${part.partNo}-final`,
+        part: label,
+        stage: "Final cut",
+        planned: show(finalCut),
+        closed: "—",
+        delayed: "—",
+      }
     );
   }
   return rows;

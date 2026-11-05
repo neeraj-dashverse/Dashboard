@@ -42,6 +42,23 @@ export function daysLate(planned: string | null, today: string): number {
   return Math.round((b - a) / 86400000);
 }
 
+/**
+ * Days a stage ran past its plan. 0 when it closed on time or the plan is still ahead.
+ * Still open and the plan has passed: days from the plan through today.
+ */
+export function delayDays(
+  planned: string | null | undefined,
+  closed: string | null | undefined,
+  today: string
+): number | null {
+  const plan = toIsoLoose(planned);
+  if (!plan) return null;
+  const end = toIsoLoose(closed);
+  if (end) return end > plan ? daysLate(plan, end) : 0;
+  if (today > plan) return daysLate(plan, today);
+  return 0;
+}
+
 /** Days until a future date (0 if today, negative if past). */
 export function daysUntil(iso: string | null, today: string): number | null {
   if (!iso) return null;
