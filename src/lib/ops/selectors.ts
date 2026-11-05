@@ -535,6 +535,89 @@ export function qualityForAnimator(
   );
 }
 
+export type AnimatorProductivity = {
+  name: string;
+  team: "in_house" | "agency";
+  openParts: number;
+  deliveredParts: number;
+  workedSec: number;
+  /** Distinct dates on the Animation productivity sheet. */
+  daysWorked: number;
+  /** Average output minutes on those days. Correction rows count as a day with 0 minutes. */
+  minutesPerDay: number | null;
+  /** Average days animation ran past the rough-cut plan. */
+  avgDelay: number | null;
+  qualityAvg: number | null;
+  reviews: number;
+};
+
+/** One row per animator who has parts or a quality review. Feedback text stays out of this list. */
+export function animatorProductivity(snap: OpsSnapshot): AnimatorProductivity[] {
+  const roster = new Map<string, { name: string; team: "in_house" | "agency" }>();
+  for (const animator of snap.animators) {
+    const key = personKey(animator.name);
+    if (!key) continue;
+    roster.set(key, { name: animator.name.trim(), team: animator.team });
+  }
+  for (const log of snap.dailyLogs) {
+    const key = personKey(log.artist);
+    if (!key || roster.has(key)) continue;
+    roster.set(key, { name: log.artist.trim(), team: "in_house" });
+  }
+
+  const partsFor = (name: string) =>
+    snap.parts.filter((part) => {
+      const names = splitPersonNames(part.artist);
+      if (names.some((n) => personKey(n) === personKey(name))) return true;
+      return part.artists.some((credit) => personKey(artistName(snap, credit.artistId)) === personKey(name));
+    });
+
+  return [...roster.values()]
+    .map((person) => {
+      const parts = partsFor(person.name);
+      const delays = parts
+        .map((part) =>
+          delayDays(
+            cellPlanDate(snap, part.promoId, part.partNo, /rough cut|first cut|first animation|first edit/i),
+            part.aniCloseDate,
+            snap.today
+          )
+        )
+        .filter((days): days is number => days != null);
+      const reviews = qualityForAnimator(snap, person.name);
+      const qualityAvg = avg(
+        reviews.map((review) => review.animation?.overallQuality).filter((n): n is number => n != null)
+      );
+      const logs = snap.dailyLogs.filter((log) => personKey(log.artist) === personKey(person.name));
+      const daysWorked = new Set(logs.map((log) => log.date)).size;
+      const minutes = logs.reduce((sum, log) => sum + log.outputMinutes, 0);
+      return {
+        name: person.name,
+        team: person.team,
+        openParts: parts.filter((part) => part.stage !== "delivered").length,
+        deliveredParts: parts.filter((part) => part.stage === "delivered").length,
+        workedSec: parts.reduce((sum, part) => sum + (part.workedDurationSec ?? 0), 0),
+        daysWorked,
+        minutesPerDay: daysWorked ? Math.round((minutes / daysWorked) * 10) / 10 : null,
+        avgDelay: delays.length
+          ? Math.round((delays.reduce((sum, days) => sum + days, 0) / delays.length) * 10) / 10
+          : null,
+        qualityAvg,
+        reviews: reviews.length,
+      };
+    })
+    .filter(
+      (person) =>
+        person.openParts > 0 || person.deliveredParts > 0 || person.reviews > 0 || person.daysWorked > 0
+    )
+    .sort(
+      (a, b) =>
+        (b.avgDelay ?? -1) - (a.avgDelay ?? -1) ||
+        b.openParts - a.openParts ||
+        a.name.localeCompare(b.name)
+    );
+}
+
 /** Quality reviews naming this person as editor. */
 export function qualityForEditor(
   snap: OpsSnapshot,

@@ -16,6 +16,7 @@ import {
 import type {
   Animator,
   AssetTeamRow,
+  DailyThroughputLog,
   Part,
   PipelineStage,
   PreProdAssetRow,
@@ -377,6 +378,57 @@ export function parsePreProd(rows: Grid): Map<string, PreProdAssetRow> {
     });
   }
   return map;
+}
+
+/** Animation productivity · Master data. One row per artist × promo × day. */
+export function parseDailyLogs(rows: Grid): DailyThroughputLog[] {
+  const out: DailyThroughputLog[] = [];
+  let seq = 0;
+  for (const r of rows) {
+    const artist = text(r[2]);
+    const dateRaw = text(r[0]) ?? "";
+    if (!artist || /^artist$/i.test(artist)) continue;
+    const date = dailyDate(dateRaw);
+    if (!date) continue;
+    const duration = text(r[6]) ?? "";
+    const kind = durationKind(duration);
+    out.push({
+      id: `day-${seq++}`,
+      date,
+      dateRaw,
+      podLead: text(r[1]),
+      artist,
+      showName: text(r[3]) ?? "",
+      promoName: text(r[4]) ?? "",
+      partsWorked: num(r[5]),
+      workType: kind.workType,
+      durationBucket: kind.durationBucket,
+      outputMinutes: kind.outputMinutes,
+      remarks: text(r[7]),
+    });
+  }
+  return out;
+}
+
+function dailyDate(raw: string): string | null {
+  const iso = toIsoDate(raw, "dmy");
+  if (!iso) return null;
+  const year = Number(iso.slice(0, 4));
+  if (year >= 2018) return iso;
+  const fixed = 2020 + (year % 100);
+  return `${fixed}${iso.slice(4)}`;
+}
+
+function durationKind(raw: string): {
+  workType: "new" | "correction";
+  durationBucket: "<3" | "3-5" | null;
+  outputMinutes: number;
+} {
+  const value = raw.toLowerCase();
+  if (/correction/.test(value)) return { workType: "correction", durationBucket: null, outputMinutes: 0 };
+  if (/3\s*[-–]\s*5/.test(value)) return { workType: "new", durationBucket: "3-5", outputMinutes: 4 };
+  if (/less|<\s*3/.test(value)) return { workType: "new", durationBucket: "<3", outputMinutes: 1.5 };
+  return { workType: "new", durationBucket: null, outputMinutes: 0 };
 }
 
 // ── Master Productivity → quality reviews ─────────────────────────────────────

@@ -10,6 +10,7 @@ const navItems = [
   { href: "/plan", label: "Plan", icon: "◷" },
   { href: "/pipeline", label: "Pipeline", icon: "▤" },
   { href: "/team", label: "Team", icon: "☰" },
+  { href: "/productivity", label: "Productivity", icon: "◈" },
   { href: "/record", label: "Record", icon: "≡" },
   { href: "/demarcate", label: "Demarcate", icon: "✎" },
 ];

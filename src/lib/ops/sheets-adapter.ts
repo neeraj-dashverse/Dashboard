@@ -10,6 +10,7 @@
  */
 import type { OpsAdapter } from "./adapter";
 import {
+  ANIMATION_PRODUCTIVITY_SHEET,
   DASHVERSE_PFM_SHEET,
   PFM_ASSETS_SHEET,
   PFM_TIMELINE_SHEET,
@@ -23,6 +24,7 @@ import {
   matchMasterDetail,
   parseMasterDetails,
   parseParts,
+  parseDailyLogs,
   parsePreProd,
   parsePromos,
   parseQuality,
@@ -144,7 +146,8 @@ async function loadPlanTabs(): Promise<{ planner: Grid; remarks: Grid }> {
 
 export async function loadFromSheets(): Promise<OpsSnapshot> {
   const masterRange = `'${DASHVERSE_PFM_SHEET.tabs.master.name}'!A1:AH3000`;
-  const [timeline, assetsBook, planTabs, masterBook] = await Promise.all([
+  const dailyRange = `'${ANIMATION_PRODUCTIVITY_SHEET.tabs.masterData.name}'!A1:H5000`;
+  const [timeline, assetsBook, planTabs, masterBook, dailyBook] = await Promise.all([
     batchGet(TIMELINE, [
       RANGES.masterTracker,
       RANGES.productionTracker,
@@ -155,6 +158,10 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
     loadPlanTabs(),
     batchGet(DASHVERSE_PFM_SHEET.spreadsheetId, [masterRange]).catch((err) => {
       console.error("[ops] Master Sheet detail read failed:", err);
+      return {} as Record<string, Grid>;
+    }),
+    batchGet(ANIMATION_PRODUCTIVITY_SHEET.spreadsheetId, [dailyRange]).catch((err) => {
+      console.error("[ops] Animation productivity read failed:", err);
       return {} as Record<string, Grid>;
     }),
   ]);
@@ -242,19 +249,17 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
       PFM_ASSETS_SHEET.tabs.promosAssetsMaster.name,
       PFM_ASSETS_SHEET.url
     ),
-    // No separate daily-throughput spreadsheet exists; the Timeline
-    // "Productivity Animation" tab is per-part quality, not a daily log.
     throughputSource: source(
-      PFM_TIMELINE_SHEET.spreadsheetId,
-      PFM_TIMELINE_SHEET.spreadsheetName,
-      "Productivity Animation",
-      `https://docs.google.com/spreadsheets/d/${PFM_TIMELINE_SHEET.spreadsheetId}/edit`
+      ANIMATION_PRODUCTIVITY_SHEET.spreadsheetId,
+      ANIMATION_PRODUCTIVITY_SHEET.spreadsheetName,
+      ANIMATION_PRODUCTIVITY_SHEET.tabs.masterData.name,
+      ANIMATION_PRODUCTIVITY_SHEET.url
     ),
     promos,
     parts,
     animators,
     qualityReviews,
-    dailyLogs: [],
+    dailyLogs: parseDailyLogs((dailyBook[dailyRange] ?? []).slice(1)),
     pendingWrites: [],
     dismissedNudgeIds: [],
     plannerCells: parsePlanner(planTabs.planner),
