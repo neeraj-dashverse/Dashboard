@@ -4,11 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 const navItems = [
-  { href: "/", label: "Today", icon: "◉" },
-  { href: "/tasks", label: "Tasks", icon: "☑" },
   { href: "/planner", label: "Calendar", icon: "▦" },
   { href: "/plan", label: "Plan", icon: "◷" },
-  { href: "/pipeline", label: "Pipeline", icon: "▤" },
   { href: "/team", label: "Team", icon: "☰" },
   { href: "/productivity", label: "Productivity", icon: "◈" },
   { href: "/record", label: "Record", icon: "≡" },
@@ -72,10 +69,7 @@ export function Sidebar() {
               Operations
             </p>
             {navItems.map((item) => {
-              const active =
-                item.href === "/"
-                  ? pathname === "/" || pathname.startsWith("/promo")
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
                 <Link
                   key={item.href}

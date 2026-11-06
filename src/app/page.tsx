@@ -1,14 +1,6 @@
-import { OpsProvider } from "@/components/ops/OpsProvider";
-import { TodayBoard } from "@/components/ops/TodayBoard";
-import { opsAdapter } from "@/lib/ops/adapter";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default async function TodayPage() {
-  const snap = await opsAdapter.load();
-  return (
-    <OpsProvider initial={snap}>
-      <TodayBoard />
-    </OpsProvider>
-  );
+/** Today is parked until it has a place in the dashboard. */
+export default function HomePage() {
+  redirect("/planner");
 }
