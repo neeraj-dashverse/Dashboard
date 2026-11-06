@@ -831,31 +831,91 @@ function assetPlannedDate(snap: OpsSnapshot, promo: Promo): string | null {
  * Production calendar: every Production Tracker part whose Stage is not Delivered.
  * Status "Done" does not remove the row.
  */
-export function plannerRows(snap: OpsSnapshot): PlannerRow[] {
-  const prio = (p: Promo) => (p.priority === "P0" ? 0 : p.priority === "P1" ? 1 : 2);
-  const promos = snap.promos
-    .map((p, i) => ({ p, i }))
-    .filter(({ p }) => snap.parts.some((part) => part.promoId === p.id && part.stage !== "delivered"))
-    .sort((a, b) => prio(a.p) - prio(b.p) || a.i - b.i)
-    .map(({ p }) => p);
+function promoBaseId(id: string): string {
+  return id.split("#")[0];
+}
 
+/** A Production Tracker row still shows when it is not on Master Tracker. */
+function promoForPart(snap: OpsSnapshot, part: Part): Promo {
+  const found =
+    snap.promos.find((promo) => promo.id === part.promoId || promoBaseId(promo.id) === part.promoId) ??
+    null;
+  if (found) return found;
+  const [showName = "—", promoName = "—"] = part.promoId.split("|");
+  return {
+    id: part.promoId,
+    showName,
+    scriptName: promoName,
+    promoName,
+    finalAssetLengthSec: null,
+    durationMin: null,
+    received: true,
+    openFiles: false,
+    priority: null,
+    masterStage: null,
+    canvasCompletionTimeline: null,
+    canvasStatus: null,
+    fiveMinTimeline: null,
+    krockLink5Min: null,
+    completeDeliverable: null,
+    deliverableWithFinalCorrections: null,
+    finalCorrectedFiles: null,
+    comments: null,
+    scriptLink: null,
+    scriptFormatDone: null,
+    canvasLink: null,
+    voSamples: null,
+    videoSamples: null,
+    showLink: null,
+    synopsisLink: null,
+    notes: null,
+    openFilesReceived: false,
+    openFilesReceivedStatus: null,
+    status: null,
+    finalRendersLink: null,
+    projectFilesLink: null,
+    assetsLink: null,
+    perMin: null,
+    promoCost: null,
+    paymentStatus: null,
+    deliveryDate: null,
+    trackerStatus: "WIP",
+    cps: null,
+    fiveMinStatus: null,
+    initialDurationSec: null,
+    workingScriptLink: null,
+    agencyScriptLink: null,
+    demarcatedScriptLink: null,
+    remarks: null,
+    totalAssetMade: null,
+    totalAssetGenerated: null,
+    creditPerMinInhouse: null,
+    lastTrackerUpdateAt: null,
+    assetTeam: null,
+    preProd: null,
+  };
+}
+
+export function plannerRows(snap: OpsSnapshot): PlannerRow[] {
+  const open = snap.parts
+    .filter((part) => part.stage !== "delivered")
+    .slice()
+    .sort((a, b) => a.promoId.localeCompare(b.promoId) || a.partNo - b.partNo);
   const rows: PlannerRow[] = [];
-  for (const promo of promos) {
-    const open = snap.parts
-      .filter((p) => p.promoId === promo.id && p.stage !== "delivered")
-      .sort((a, b) => a.partNo - b.partNo);
-    if (open.length === 0) continue;
-    open.forEach((part, i) =>
-      rows.push({
-        key: `${promo.id}|${part.partNo}|${part.id}`,
-        promo,
-        partNo: part.partNo,
-        part,
-        firstOfPromo: i === 0,
-        plannedDate: productionPlannedDate(snap, promo, part),
-        planMarks: marksFor(snap, promo.id, part.partNo, "production"),
-      })
-    );
+  let lastPromo = "";
+  for (const part of open) {
+    const promo = promoForPart(snap, part);
+    const planId = part.promoId;
+    rows.push({
+      key: `${planId}|${part.partNo}|${part.id}`,
+      promo,
+      partNo: part.partNo,
+      part,
+      firstOfPromo: planId !== lastPromo,
+      plannedDate: productionPlannedDate(snap, { ...promo, id: planId }, part),
+      planMarks: marksFor(snap, planId, part.partNo, "production"),
+    });
+    lastPromo = planId;
   }
   return rows;
 }
@@ -917,7 +977,7 @@ export function isAssetOpen(promo: Promo): boolean {
   return true;
 }
 
-export type TeamGroupId = "assets" | "animator" | "editor" | "agency";
+export type TeamGroupId = "assets" | "animation" | "agency" | "edit" | "cps";
 
 export type TeamHold = {
   promoId: string;
@@ -946,18 +1006,20 @@ export type TeamGroup = {
 
 const TEAM_GROUP_ORDER: { id: TeamGroupId; label: string }[] = [
   { id: "assets", label: "Assets" },
-  { id: "animator", label: "Animators" },
-  { id: "editor", label: "Editors" },
+  { id: "animation", label: "Animation" },
   { id: "agency", label: "Agency" },
+  { id: "edit", label: "Edit" },
+  { id: "cps", label: "CPS" },
 ];
 
 function personKey(name: string): string {
   return name.trim().toLowerCase();
 }
 
+/** A comma in an artist cell is two people. Same for slash, &, and "and". */
 function splitPersonNames(v: string | null | undefined): string[] {
   return String(v ?? "")
-    .split(/[,/]|&| and /i)
+    .split(/[,，;/]|&| and /i)
     .map((s) => s.trim())
     .filter((s) => s.length > 0 && !/^(tbd|n\/a|na|nil|none|-)$/i.test(s));
 }
@@ -980,7 +1042,8 @@ function currentDoing(row: PlannerRow, today: string, tab: PlannerTab): string {
 }
 
 /**
- * Ongoing calendar work, split by assets, in-house animators, editors, and agency.
+ * Ongoing calendar work. A comma in an artist cell is two people.
+ * In-house animation and agency are separate, and each person is free on their own latest plot.
  * Each open row says what they are doing and, if the plan date has passed, that they were supposed to be free.
  */
 export function teamGroups(snap: OpsSnapshot): TeamGroup[] {
@@ -1019,9 +1082,16 @@ export function teamGroups(snap: OpsSnapshot): TeamGroup[] {
         if (named) artists.push(named);
       }
     }
-    const group: TeamGroupId = row.part?.team === "agency" ? "agency" : "animator";
-    for (const name of artists) addHold(group, name, row, title, "production");
-    for (const name of splitPersonNames(row.part?.editors)) addHold("editor", name, row, title, "production");
+    const agencyPart = row.part?.team === "agency";
+    for (const name of artists) addHold(agencyPart ? "agency" : "animation", name, row, title, "production");
+    // Agency does its own edit, so those names stay in Agency. Edit is in-house only.
+    if (!agencyPart) {
+      for (const name of splitPersonNames(row.part?.editors)) addHold("edit", name, row, title, "production");
+    } else {
+      for (const name of splitPersonNames(row.part?.editors)) addHold("agency", name, row, title, "production");
+    }
+    const cps = row.promo.cps?.trim();
+    if (cps) addHold("cps", cps, row, title, "production");
   }
 
   for (const row of plannerPreprodRows(snap)) {
@@ -1038,8 +1108,43 @@ export function teamGroups(snap: OpsSnapshot): TeamGroup[] {
     for (const person of people.values()) busyEverywhere.add(personKey(person.name));
   }
 
+  const addFree = (group: TeamGroupId, names: Array<string | null | undefined>) => {
+    const people = buckets.get(group)!;
+    for (const raw of names) {
+      const name = (raw ?? "").trim();
+      const key = personKey(name);
+      if (!key || key.startsWith("a:") || people.has(key) || busyEverywhere.has(key)) continue;
+      people.set(key, { name, freeAt: snap.today, holds: [] });
+    }
+  };
+  addFree(
+    "animation",
+    snap.animators.filter((animator) => animator.team !== "agency").map((animator) => animator.name)
+  );
+  addFree(
+    "agency",
+    snap.animators.filter((animator) => animator.team === "agency").map((animator) => animator.name)
+  );
+  addFree(
+    "edit",
+    snap.parts.filter((part) => part.team !== "agency").flatMap((part) => splitPersonNames(part.editors))
+  );
+  addFree(
+    "assets",
+    snap.promos.flatMap((promo) => [
+      promo.assetTeam?.artist1,
+      promo.assetTeam?.artist2,
+      promo.assetTeam?.artist3,
+      promo.assetTeam?.artLead,
+      promo.preProd?.artist,
+    ])
+  );
+  addFree("cps", [...snap.cpsRoster, ...snap.promos.map((promo) => promo.cps)]);
+
   const sortPeople = (people: TeamPerson[]) =>
     people.sort((a, b) => {
+      if (a.holds.length === 0 && b.holds.length > 0) return -1;
+      if (b.holds.length === 0 && a.holds.length > 0) return 1;
       const lateA = Math.max(0, ...a.holds.map((h) => h.lateDays));
       const lateB = Math.max(0, ...b.holds.map((h) => h.lateDays));
       if (lateA !== lateB) return lateB - lateA;
@@ -1057,10 +1162,10 @@ export function teamGroups(snap: OpsSnapshot): TeamGroup[] {
       person.holds.sort((a, b) => b.lateDays - a.lateDays || (a.until ?? "").localeCompare(b.until ?? ""));
     }
     const roster =
-      group.id === "animator"
-        ? snap.animators.filter((a) => a.team !== "agency")
+      group.id === "animation"
+        ? snap.animators.filter((animator) => animator.team !== "agency")
         : group.id === "agency"
-          ? snap.animators.filter((a) => a.team === "agency")
+          ? snap.animators.filter((animator) => animator.team === "agency")
           : [];
     const freeNow = roster
       .map((a) => a.name.trim())

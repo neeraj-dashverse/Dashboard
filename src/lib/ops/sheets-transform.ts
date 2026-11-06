@@ -40,7 +40,14 @@ const STAGE_MAP: Record<string, PipelineStage> = {
 /** Stage column only. Status "Done" does not take a part off the calendar. */
 function toStage(raw: string | null): PipelineStage {
   const s = (raw ?? "").trim().toLowerCase();
-  return STAGE_MAP[s] ?? "planning";
+  if (STAGE_MAP[s]) return STAGE_MAP[s];
+  if (/deliver/.test(s)) return "delivered";
+  if (/anim/.test(s)) return "animation";
+  if (/edit/.test(s)) return "edit";
+  if (/correct/.test(s)) return "correction";
+  if (/sound/.test(s)) return "sound";
+  if (/plot|plan/.test(s)) return "planning";
+  return "planning";
 }
 
 function toTeam(raw: string | null): TeamKind {
@@ -581,8 +588,8 @@ export function buildAnimators(
   for (const cell of partArtistCells) {
     for (const n of cell.names) {
       const k = normKey(n);
-      // agency wins if ever marked agency
-      if (cell.team === "agency" || !teamByName.has(k)) teamByName.set(k, cell.team);
+      // In-house wins. One agency row must not move an in-house artist like Dhara.
+      if (cell.team === "in_house" || !teamByName.has(k)) teamByName.set(k, cell.team);
     }
   }
   for (const n of qualityAnimators) {

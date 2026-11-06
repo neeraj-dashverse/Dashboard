@@ -270,6 +270,16 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
   };
 }
 
+/** Reuse one sheet read across tab changes. Refresh still pulls a new copy. */
+const SHEET_CACHE_MS = 60_000;
+let sheetCache: { at: number; snap: OpsSnapshot } | null = null;
+let sheetInflight: Promise<OpsSnapshot> | null = null;
+
+function rememberSheets(snap: OpsSnapshot, fresh = false): OpsSnapshot {
+  sheetCache = { at: fresh || !sheetCache ? Date.now() : sheetCache.at, snap };
+  return snap;
+}
+
 /** Sheets snapshot + replay unsynced DB edits so refresh never loses work. */
 async function hydrateFromSheetsAndDb(): Promise<OpsSnapshot> {
   const snap = await loadFromSheets();
@@ -287,14 +297,19 @@ async function hydrateFromSheetsAndDb(): Promise<OpsSnapshot> {
   setPendingWrites(pending);
 
   markLiveHydrated();
-  return getSnapshot();
+  return rememberSheets(getSnapshot());
 }
 
 export const sheetsAdapter: OpsAdapter = {
   async load() {
-    // Always re-pull. Sheet edits (WIP status, new promos) must show on the
-    // next page load — the old in-memory cache made the calendar look empty.
-    return hydrateFromSheetsAndDb();
+    if (sheetCache && Date.now() - sheetCache.at < SHEET_CACHE_MS) return sheetCache.snap;
+    if (sheetInflight) return sheetInflight;
+    sheetInflight = hydrateFromSheetsAndDb()
+      .then((snap) => rememberSheets(snap, true))
+      .finally(() => {
+        sheetInflight = null;
+      });
+    return sheetInflight;
   },
   async act(action) {
     // Record only touches the Planner tab. Reloading every sheet first is what
@@ -348,7 +363,7 @@ export const sheetsAdapter: OpsAdapter = {
           }
         }
       }
-      return getSnapshot();
+      return rememberSheets(getSnapshot());
     }
 
     // Each Vercel request starts empty. A plan save must not answer with the
@@ -360,7 +375,7 @@ export const sheetsAdapter: OpsAdapter = {
     if (action.type === "dismiss_nudge") {
       await persistDismissNudge(action.nudgeId);
       applyAction(action, { recordWrite: false });
-      return getSnapshot();
+      return rememberSheets(getSnapshot());
     }
 
     // Planner cells go straight to the Planner tab (no queue).
@@ -390,7 +405,7 @@ export const sheetsAdapter: OpsAdapter = {
         );
         throw err;
       }
-      return getSnapshot();
+      return rememberSheets(getSnapshot());
     }
 
     if (action.type === "append_plan_remark") {
@@ -411,7 +426,7 @@ export const sheetsAdapter: OpsAdapter = {
         dropPlanRemark(action.promoId, at);
         throw err;
       }
-      return getSnapshot();
+      return rememberSheets(getSnapshot());
     }
 
     // Mutate in memory (local pending row), then mirror into Supabase.
@@ -424,14 +439,16 @@ export const sheetsAdapter: OpsAdapter = {
         setPendingWrites([row, ...rest]);
       }
     }
-    return getSnapshot();
+    return rememberSheets(getSnapshot());
   },
   async flushWrites() {
     // Gap 2 will push to Sheets then markWritesSynced. For now: mark local synced only.
     return flushPendingWrites();
   },
   async reset() {
-    return hydrateFromSheetsAndDb();
+    sheetCache = null;
+    const snap = await hydrateFromSheetsAndDb();
+    return rememberSheets(snap, true);
   },
 };
 

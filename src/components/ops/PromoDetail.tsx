@@ -71,9 +71,12 @@ function LinkChip({ href, label }: { href: string | null; label: string }) {
 
 export function PromoDetail({ promoId }: { promoId: string }) {
   const { snap, act, busy } = useOps();
-  const promo = snap.promos.find((p) => p.id === promoId);
+  const promo =
+    snap.promos.find((p) => p.id === promoId) ??
+    snap.promos.find((p) => encodeURIComponent(p.id) === promoId) ??
+    snap.promos.find((p) => p.id === promoId.replace(/%7C/gi, "|"));
   const parts = snap.parts
-    .filter((p) => p.promoId === promoId)
+    .filter((p) => p.promoId === (promo?.id ?? promoId))
     .sort((a, b) => a.partNo - b.partNo);
 
   if (!promo) {

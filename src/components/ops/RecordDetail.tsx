@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { delayDays, formatDmy, formatDuration, STAGE_LABEL } from "@/lib/ops/selectors";
 import type { AssetTeamRow, Part, PreProdAssetRow, Promo, QualityReview } from "@/lib/ops/types";
 import { SyncStrip } from "./SyncStrip";
@@ -108,6 +108,13 @@ export function RecordDetail({ promoId }: { promoId: string }) {
     .filter((date): date is string => !!date)
     .sort();
   const workedTotal = parts.reduce((sum, part) => sum + (part.workedDurationSec || 0), 0);
+  const [openParts, setOpenParts] = useState<number[]>([]);
+  const [assetsOpen, setAssetsOpen] = useState(false);
+  const assetRows = assetStageRows(
+    asset?.correctionsEndDate || asset?.endDate || pre?.closedDate,
+    pre?.plannedDate,
+    snap.today
+  );
 
   return (
     <div className="space-y-5">
@@ -175,50 +182,17 @@ export function RecordDetail({ promoId }: { promoId: string }) {
       />
 
       <section className="space-y-2">
-        <h2 className="text-[13px] font-bold text-white">Stage dates</h2>
-        <p className="text-[12px] text-slate-500">
-          Planned comes from the Plan page. Closed is the sheet date for that stage. Delayed is how many days the close ran past the plan, or through today if it is still open.
-        </p>
-        <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
-          <table className="min-w-full border-collapse text-left text-[12px]">
-            <thead className="bg-[#222738] text-[10px] font-bold uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="whitespace-nowrap px-3 py-2.5">Part</th>
-                <th className="whitespace-nowrap px-3 py-2.5">Stage</th>
-                <th className="whitespace-nowrap px-3 py-2.5">Planned</th>
-                <th className="whitespace-nowrap px-3 py-2.5">Closed</th>
-                <th className="whitespace-nowrap px-3 py-2.5">Delayed</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stageDateRows(
-                parts,
-                plans,
-                asset?.correctionsEndDate || asset?.endDate || pre?.closedDate,
-                pre?.plannedDate,
-                snap.today
-              ).map((row) => (
-                <tr key={row.key} className="border-t border-white/[0.06]">
-                  <td className="whitespace-nowrap px-3 py-2 text-slate-300">{row.part}</td>
-                  <td className="whitespace-nowrap px-3 py-2 font-semibold text-white">{row.stage}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-slate-300">{row.planned}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-slate-300">{row.closed}</td>
-                  <td
-                    className={`whitespace-nowrap px-3 py-2 font-semibold ${
-                      row.delayed !== "—" && row.delayed !== "0" ? "text-rose-200" : "text-slate-300"
-                    }`}
-                  >
-                    {row.delayed === "—" || row.delayed === "0" ? row.delayed : `${row.delayed}d`}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-[13px] font-bold text-white">Parts</h2>
+          <button
+            type="button"
+            onClick={() => setAssetsOpen((value) => !value)}
+            className="rounded-md bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-[#9bb0ff] hover:bg-white/[0.1]"
+          >
+            {assetsOpen ? "Hide asset dates" : "Asset dates"}
+          </button>
         </div>
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="text-[13px] font-bold text-white">Parts</h2>
+        {assetsOpen && <DateTable rows={assetRows} />}
         {parts.length === 0 ? (
           <p className="text-[12px] text-slate-500">No production parts.</p>
         ) : (
@@ -236,15 +210,29 @@ export function RecordDetail({ promoId }: { promoId: string }) {
                   {part.artist || "No artist"}
                   {part.editors ? <span className="text-slate-500"> · {part.editors}</span> : null}
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Chip label="Length" value={duration(part.durationSec)} />
                   <Chip label="Worked" value={duration(part.workedDurationSec)} />
                   <Chip label="Days" value={part.days} />
-                  <Chip label="Animation" value={span(part.aniStartDate, part.aniCloseDate)} />
-                  <Chip label="Edit" value={when(part.editCloseDate)} />
-                  <Chip label="Correction" value={span(part.correctionStartDate, part.correctionEndDate)} />
-                  <Chip label="Sound" value={when(part.soundEndDate)} />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOpenParts((current) =>
+                        current.includes(part.partNo)
+                          ? current.filter((partNo) => partNo !== part.partNo)
+                          : [...current, part.partNo]
+                      )
+                    }
+                    className="rounded-md bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-[#9bb0ff] hover:bg-white/[0.1]"
+                  >
+                    {openParts.includes(part.partNo) ? "Hide dates" : "Dates"}
+                  </button>
                 </div>
+                {openParts.includes(part.partNo) && (
+                  <div className="mt-3">
+                    <DateTable rows={partStageRows(part, plans, snap.today)} />
+                  </div>
+                )}
                 <div className="mt-3 flex flex-wrap gap-2">
                   {krockButtons(reviews, part.partNo).map((krock) => (
                     <a
@@ -265,18 +253,9 @@ export function RecordDetail({ promoId }: { promoId: string }) {
         )}
       </section>
 
-      {(plans.length > 0 || remarks.length > 0 || promo?.remarks || promo?.notes || promo?.comments) && (
+      {uniqueText([promo?.comments, promo?.notes, promo?.remarks, ...remarks.map((item) => item.body)]).length > 0 && (
         <section className="rounded-xl border border-white/[0.08] bg-[#222738] p-4">
-          <h2 className="text-[13px] font-bold text-white">Notes and plan</h2>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {uniquePlans(plans).map((cell) => (
-              <Chip
-                key={`${cell.partNo}-${cell.date}-${cell.text}`}
-                label={cell.partNo ? `P${cell.partNo}` : "Assets"}
-                value={`${when(cell.date)} · ${cell.text}`}
-              />
-            ))}
-          </div>
+          <h2 className="text-[13px] font-bold text-white">Notes</h2>
           <div className="mt-3 space-y-2">
             {uniqueText([promo?.comments, promo?.notes, promo?.remarks, ...remarks.map((item) => item.body)]).map(
               (text) => (
@@ -410,88 +389,99 @@ function delayLabel(
   return String(days);
 }
 
-function stageDateRows(
-  parts: Part[],
-  plans: { partNo: number; date: string; text: string }[],
+type StageDate = { key: string; stage: string; planned: string; closed: string; delayed: string };
+
+function assetStageRows(
   assetEnd: string | null | undefined,
   assetPlanned: string | null | undefined,
   today: string
-): { key: string; part: string; stage: string; planned: string; closed: string; delayed: string }[] {
+): StageDate[] {
   const show = (value: string | null | undefined) => (value ? formatDmy(value) : "—");
-  const rows: { key: string; part: string; stage: string; planned: string; closed: string; delayed: string }[] = [
+  return [
     {
       key: "assets",
-      part: "—",
       stage: "Assets",
       planned: show(assetPlanned),
       closed: show(assetEnd),
       delayed: delayLabel(assetPlanned, assetEnd, today),
     },
   ];
-  for (const part of parts) {
-    const rough = planIso(plans, part.partNo, /rough cut|first cut|first animation|first edit/i);
-    const finalCut = planIso(plans, part.partNo, /final cut|second cut|correction close/i);
-    const sound = planIso(plans, part.partNo, /sound/i);
-    const label = `P${part.partNo}`;
-    rows.push(
-      {
-        key: `${part.partNo}-ani`,
-        part: label,
-        stage: "Animation",
-        planned: show(rough),
-        closed: show(part.aniCloseDate),
-        delayed: delayLabel(rough, part.aniCloseDate, today),
-      },
-      {
-        key: `${part.partNo}-edit`,
-        part: label,
-        stage: "Edit",
-        planned: show(rough),
-        closed: show(part.editCloseDate),
-        delayed: delayLabel(rough, part.editCloseDate, today),
-      },
-      {
-        key: `${part.partNo}-cor`,
-        part: label,
-        stage: "Correction",
-        planned: show(finalCut),
-        closed: show(part.correctionEndDate),
-        delayed: delayLabel(finalCut, part.correctionEndDate, today),
-      },
-      {
-        key: `${part.partNo}-sound`,
-        part: label,
-        stage: "Sound",
-        planned: show(sound),
-        closed: show(part.soundEndDate),
-        delayed: delayLabel(sound, part.soundEndDate, today),
-      },
-      {
-        key: `${part.partNo}-rough`,
-        part: label,
-        stage: "Rough cut",
-        planned: show(rough),
-        closed: "—",
-        delayed: "—",
-      },
-      {
-        key: `${part.partNo}-final`,
-        part: label,
-        stage: "Final cut",
-        planned: show(finalCut),
-        closed: "—",
-        delayed: "—",
-      }
-    );
-  }
-  return rows;
 }
 
-function span(start: string | null, end: string | null): string {
-  const a = when(start);
-  const b = when(end);
-  if (a && b) return `${a} → ${b}`;
-  return b || a;
+function partStageRows(
+  part: Part,
+  plans: { partNo: number; date: string; text: string }[],
+  today: string
+): StageDate[] {
+  const show = (value: string | null | undefined) => (value ? formatDmy(value) : "—");
+  const rough = planIso(plans, part.partNo, /rough cut|first cut|first animation|first edit/i);
+  const finalCut = planIso(plans, part.partNo, /final cut|second cut|correction close/i);
+  const sound = planIso(plans, part.partNo, /sound/i);
+  return [
+    {
+      key: "ani",
+      stage: "Animation",
+      planned: show(rough),
+      closed: show(part.aniCloseDate),
+      delayed: delayLabel(rough, part.aniCloseDate, today),
+    },
+    {
+      key: "edit",
+      stage: "Edit",
+      planned: show(rough),
+      closed: show(part.editCloseDate),
+      delayed: delayLabel(rough, part.editCloseDate, today),
+    },
+    {
+      key: "cor",
+      stage: "Correction",
+      planned: show(finalCut),
+      closed: show(part.correctionEndDate),
+      delayed: delayLabel(finalCut, part.correctionEndDate, today),
+    },
+    {
+      key: "sound",
+      stage: "Sound",
+      planned: show(sound),
+      closed: show(part.soundEndDate),
+      delayed: delayLabel(sound, part.soundEndDate, today),
+    },
+    { key: "rough", stage: "Rough cut", planned: show(rough), closed: "—", delayed: "—" },
+    { key: "final", stage: "Final cut", planned: show(finalCut), closed: "—", delayed: "—" },
+  ];
+}
+
+function DateTable({ rows }: { rows: StageDate[] }) {
+  return (
+    <div className="overflow-x-auto rounded-lg border border-white/[0.08]">
+      <table className="min-w-full border-collapse text-left text-[12px]">
+        <thead className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th className="whitespace-nowrap px-3 py-2">Stage</th>
+            <th className="whitespace-nowrap px-3 py-2">Planned</th>
+            <th className="whitespace-nowrap px-3 py-2">Closed</th>
+            <th className="whitespace-nowrap px-3 py-2">Delayed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key} className="border-t border-white/[0.06]">
+              <td className="whitespace-nowrap px-3 py-2 font-semibold text-white">{row.stage}</td>
+              <td className="whitespace-nowrap px-3 py-2 text-slate-300">{row.planned}</td>
+              <td className="whitespace-nowrap px-3 py-2 text-slate-300">{row.closed}</td>
+              <td
+                className={`whitespace-nowrap px-3 py-2 font-semibold ${
+                  row.delayed !== "—" && row.delayed !== "0" ? "text-rose-200" : "text-slate-300"
+                }`}
+              >
+                {row.delayed === "—" || row.delayed === "0" ? row.delayed : `${row.delayed}d`}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function sumLength(parts: Part[]): string {
@@ -525,18 +515,6 @@ function uniqueLinks(promo: Promo | undefined) {
     out.push({ label, href: value });
   }
   return out;
-}
-
-function uniquePlans(
-  cells: { partNo: number; date: string; text: string }[]
-) {
-  const seen = new Set<string>();
-  return cells.filter((cell) => {
-    const key = `${cell.partNo}|${cell.date}|${cell.text.trim().toLowerCase()}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 function uniqueText(values: (string | null | undefined)[]): string[] {

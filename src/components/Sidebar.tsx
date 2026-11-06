@@ -9,7 +9,6 @@ const navItems = [
   { href: "/team", label: "Team", icon: "☰" },
   { href: "/productivity", label: "Productivity", icon: "◈" },
   { href: "/record", label: "Record", icon: "≡" },
-  { href: "/demarcate", label: "Demarcate", icon: "✎" },
 ];
 
 function itemClass(active: boolean): string {

@@ -1,5 +1,6 @@
-import { DemarcateBoard } from "@/components/ops/DemarcateBoard";
+import { redirect } from "next/navigation";
 
+/** Demarcate is parked until it has a place in the dashboard. */
 export default function DemarcatePage() {
-  return <DemarcateBoard />;
+  redirect("/planner");
 }
