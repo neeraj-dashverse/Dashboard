@@ -51,7 +51,7 @@ export function PipelineBoard() {
         <Kpi label="Delivered" value={snap.parts.filter((p) => p.stage === "delivered").length} tone="text-emerald-300" />
       </div>
 
-      <section className="rounded-xl border border-white/[0.08] bg-[#121216] p-4">
+      <section className="rounded-xl border border-white/[0.08] bg-[#222738] p-4">
         <SectionTitle title="Funnel" />
         <div className="mt-3 space-y-1.5">
           {funnel.map(({ stage, count, stuck }) => (
@@ -84,7 +84,7 @@ export function PipelineBoard() {
 function StageColumn({ stage, parts }: { stage: Stage; parts: Part[] }) {
   const { snap } = useOps();
   return (
-    <section className="rounded-xl border border-white/[0.08] bg-[#121216]/80">
+    <section className="rounded-xl border border-white/[0.08] bg-[#222738]/80">
       <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2">
         <StagePill stage={stage} />
         <span className="text-[11px] font-bold tabular-nums text-slate-500">{parts.length}</span>

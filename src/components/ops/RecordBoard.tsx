@@ -12,7 +12,7 @@ function when(value: string | null | undefined): string {
 }
 
 const fieldClass =
-  "rounded-lg border border-white/[0.1] bg-[#121216] px-3 py-2 text-[13px] text-white";
+  "rounded-lg border border-white/[0.1] bg-[#222738] px-3 py-2 text-[13px] text-white";
 
 function uniqueNames(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort((a, b) =>
@@ -69,7 +69,7 @@ function MultiFilter({
         <span className="text-slate-500">▾</span>
       </button>
       {open && (
-        <div className="absolute z-20 mt-1 max-h-72 w-72 overflow-y-auto rounded-lg border border-white/[0.1] bg-[#121216] p-1 shadow-xl">
+        <div className="absolute z-20 mt-1 max-h-72 w-72 overflow-y-auto rounded-lg border border-white/[0.1] bg-[#222738] p-1 shadow-xl">
           <button
             type="button"
             onClick={() => onChange([])}
@@ -197,7 +197,7 @@ export function RecordBoard() {
 
       <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
         <table className="min-w-full border-collapse text-left text-[12px]">
-          <thead className="bg-[#121216] text-[10px] font-bold uppercase tracking-wide text-slate-500">
+          <thead className="bg-[#222738] text-[10px] font-bold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="whitespace-nowrap px-3 py-2.5">Show</th>
               <th className="whitespace-nowrap px-3 py-2.5">Promo</th>
@@ -219,7 +219,7 @@ export function RecordBoard() {
               shown.map((record) => (
                 <tr
                   key={record.id}
-                  className="border-t border-white/[0.06] bg-[#0c0c10] hover:bg-white/[0.03]"
+                  className="border-t border-white/[0.06] bg-[#1a1e2b] hover:bg-white/[0.03]"
                 >
                   <td className="max-w-[180px] px-3 py-2.5">
                     <Link

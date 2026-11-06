@@ -424,7 +424,7 @@ RAVI: (Emotion: Firm) We need to talk.`}
                 {result.anomalies.map((a) => (
                   <li
                     key={a.id}
-                    className="rounded-lg border border-white/[0.08] bg-[#121216] px-3 py-2 text-[12px]"
+                    className="rounded-lg border border-white/[0.08] bg-[#222738] px-3 py-2 text-[12px]"
                   >
                     <p className="font-bold text-amber-200">
                       {a.id} · {a.kind} · {a.status}

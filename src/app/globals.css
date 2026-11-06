@@ -5,18 +5,52 @@
 :root {
   color-scheme: dark;
   font-size: 14.5px;
-  --dv-bg: #0a0a0d;
-  --dv-surface: #121216;
+  --dv-bg: #101218;
+  --dv-surface: #1c2030;
   --dv-blue: #4361ee;
   --dv-crimson: #d6293d;
 }
 
 body {
-  @apply bg-[#0a0a0d] text-slate-100 antialiased;
-  background-color: #0a0a0d;
+  @apply bg-[#101218] text-slate-100 antialiased;
+  background-color: #101218;
   background-image:
-    radial-gradient(ellipse at 100% 0%, rgba(214, 41, 61, 0.14), transparent 42%),
-    radial-gradient(ellipse at 0% 100%, rgba(67, 97, 238, 0.08), transparent 40%);
+    radial-gradient(ellipse at 100% 0%, rgba(214, 41, 61, 0.16), transparent 42%),
+    radial-gradient(ellipse at 0% 100%, rgba(67, 97, 238, 0.12), transparent 40%);
+}
+
+/* Reading text was slate-500 on a near-black page. Keep the dark theme, lift the ink. */
+main .text-slate-600,
+main .text-slate-500,
+main .text-slate-400 {
+  color: #dbe4f0;
+}
+main .text-slate-300,
+main .text-slate-200 {
+  color: #f4f7fb;
+}
+
+main table {
+  background-color: #2a3148;
+}
+main thead,
+main thead tr,
+main thead th {
+  background-color: #3a4462 !important;
+  color: #ffffff !important;
+}
+main tbody tr {
+  background-color: #2a3148;
+}
+main tbody tr:nth-child(even) {
+  background-color: #343d58;
+}
+main input,
+main select,
+main textarea {
+  background-color: #343d58;
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #f8fafc;
 }
 
 h1,

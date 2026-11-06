@@ -60,7 +60,7 @@ function TaskRow({
   onLater: () => void;
 }) {
   return (
-    <li className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-white/[0.08] bg-[#121216] px-3 py-3">
+    <li className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-white/[0.08] bg-[#222738] px-3 py-3">
       <div className="min-w-0">
         <p className="text-[13px] font-semibold text-white">{task.title}</p>
         <p className="mt-1 text-[12px] leading-5 text-slate-400">{task.detail}</p>

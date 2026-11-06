@@ -13,11 +13,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <div className="min-h-screen bg-[#0a0a0d]">
+        <div className="min-h-screen bg-[#101218]">
           <div className="mx-auto flex min-h-screen max-w-[1800px] flex-row">
             <Sidebar />
             <div className="min-w-0 flex-1">
-              <header className="border-b border-white/[0.08] bg-[#101014]/90 px-5 py-3 backdrop-blur lg:px-7">
+              <header className="border-b border-white/[0.1] bg-[#161a26]/95 px-5 py-3 backdrop-blur lg:px-7">
                 <div className="flex items-center justify-between gap-4">
                   <div className="lg:hidden">
                     <p className="text-sm font-semibold text-white">PocketFM Ops</p>

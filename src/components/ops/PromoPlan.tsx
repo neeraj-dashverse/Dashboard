@@ -55,7 +55,7 @@ export function PromoPlan({ promoId }: { promoId: string }) {
         <h1 className="mt-1 text-2xl font-extrabold text-white">{promo.promoName || promo.showName || "—"}</h1>
       </div>
 
-      <section className="grid gap-3 rounded-xl border border-white/[0.08] bg-[#121216] p-4 sm:grid-cols-3 lg:grid-cols-4">
+      <section className="grid gap-3 rounded-xl border border-white/[0.08] bg-[#222738] p-4 sm:grid-cols-3 lg:grid-cols-4">
         {detail("Cps", promo.cps)}
         {detail("Status", promo.trackerStatus)}
         {detail("Priority", promo.priority)}

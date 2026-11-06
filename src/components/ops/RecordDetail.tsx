@@ -181,7 +181,7 @@ export function RecordDetail({ promoId }: { promoId: string }) {
         </p>
         <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
           <table className="min-w-full border-collapse text-left text-[12px]">
-            <thead className="bg-[#121216] text-[10px] font-bold uppercase tracking-wide text-slate-500">
+            <thead className="bg-[#222738] text-[10px] font-bold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="whitespace-nowrap px-3 py-2.5">Part</th>
                 <th className="whitespace-nowrap px-3 py-2.5">Stage</th>
@@ -224,7 +224,7 @@ export function RecordDetail({ promoId }: { promoId: string }) {
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {parts.map((part) => (
-              <article key={part.partNo} className="rounded-xl border border-white/[0.08] bg-[#121216] p-4">
+              <article key={part.partNo} className="rounded-xl border border-white/[0.08] bg-[#222738] p-4">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-[15px] font-bold text-white">Part {part.partNo}</p>
                   <Pill>
@@ -266,7 +266,7 @@ export function RecordDetail({ promoId }: { promoId: string }) {
       </section>
 
       {(plans.length > 0 || remarks.length > 0 || promo?.remarks || promo?.notes || promo?.comments) && (
-        <section className="rounded-xl border border-white/[0.08] bg-[#121216] p-4">
+        <section className="rounded-xl border border-white/[0.08] bg-[#222738] p-4">
           <h2 className="text-[13px] font-bold text-white">Notes and plan</h2>
           <div className="mt-3 flex flex-wrap gap-2">
             {uniquePlans(plans).map((cell) => (
@@ -307,7 +307,7 @@ function FileLink({ label, href }: { label: string; href: string | null | undefi
     );
   }
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-[#121216] px-4 py-3 text-[14px] font-bold text-slate-500">
+    <div className="rounded-xl border border-white/[0.08] bg-[#222738] px-4 py-3 text-[14px] font-bold text-slate-500">
       {label}
       <span className="mt-1 block text-[11px] font-medium text-slate-600">Not on the PocketFM sheet</span>
     </div>
@@ -316,7 +316,7 @@ function FileLink({ label, href }: { label: string; href: string | null | undefi
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-[#121216] px-3 py-3">
+    <div className="rounded-xl border border-white/[0.08] bg-[#222738] px-3 py-3">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 text-[16px] font-bold text-white">{value}</p>
     </div>
@@ -373,7 +373,7 @@ function InfoCard({
   const extra = note.trim();
   if (facts.length === 0 && !extra) return null;
   return (
-    <section className="rounded-xl border border-white/[0.08] bg-[#121216] p-4">
+    <section className="rounded-xl border border-white/[0.08] bg-[#222738] p-4">
       <h2 className="text-[13px] font-bold text-white">{title}</h2>
       <div className="mt-3 flex flex-wrap gap-2">
         {facts.map((line) => (

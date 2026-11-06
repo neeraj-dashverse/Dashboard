@@ -66,7 +66,7 @@ export function Kpi({
   tone?: string;
 }) {
   return (
-    <div className="rounded-lg border border-white/[0.08] bg-[#121216] px-3 py-2.5">
+    <div className="rounded-lg border border-white/[0.08] bg-[#222738] px-3 py-2.5">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
       <p className={`mt-0.5 text-xl font-bold tabular-nums ${tone}`}>{value}</p>
     </div>

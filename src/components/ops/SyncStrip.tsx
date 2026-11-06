@@ -8,7 +8,7 @@ export function SyncStrip() {
   const live = snap.live;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-white/[0.08] bg-[#121216] px-3 py-2 text-[12px]">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-white/[0.08] bg-[#222738] px-3 py-2 text-[12px]">
       <span className="flex items-center gap-1.5">
         <span className={`h-2 w-2 rounded-full ${live ? "bg-emerald-400" : "bg-amber-400"}`} />
         <span className="font-semibold text-slate-200">{live ? "Live" : "Sample data"}</span>

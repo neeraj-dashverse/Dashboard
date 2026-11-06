@@ -55,7 +55,7 @@ export function ProductivityBoard() {
 
       <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
         <table className="min-w-full border-collapse text-left text-[12px]">
-          <thead className="bg-[#121216] text-[10px] font-bold uppercase tracking-wide text-slate-500">
+          <thead className="bg-[#222738] text-[10px] font-bold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="whitespace-nowrap px-3 py-2.5">Animator</th>
               <th className="whitespace-nowrap px-3 py-2.5">Open</th>
@@ -127,7 +127,7 @@ export function ProductivityBoard() {
           ) : (
             <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
               <table className="min-w-full border-collapse text-left text-[12px]">
-                <thead className="bg-[#121216] text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                <thead className="bg-[#222738] text-[10px] font-bold uppercase tracking-wide text-slate-500">
                   <tr>
                     <th className="px-3 py-2">Date</th>
                     <th className="px-3 py-2">Show</th>
@@ -172,7 +172,7 @@ export function ProductivityBoard() {
                   .map((text) => text?.trim())
                   .filter((text): text is string => !!text);
                 return (
-                  <article key={review.id} className="rounded-xl border border-white/[0.08] bg-[#121216] p-4">
+                  <article key={review.id} className="rounded-xl border border-white/[0.08] bg-[#222738] p-4">
                     <p className="text-[13px] font-semibold text-white">
                       {promo ? `${promo.showName} · ${promo.promoName}` : review.promoId}
                       <span className="text-slate-500"> · P{review.partNo}</span>

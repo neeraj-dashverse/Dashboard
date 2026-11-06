@@ -226,7 +226,7 @@ export function PlannerBoard() {
         </div>
       </div>
 
-      <div className="flex gap-1 rounded-xl border border-white/[0.08] bg-[#121216] p-1">
+      <div className="flex gap-1 rounded-xl border border-white/[0.08] bg-[#222738] p-1">
         {(
           [
             ["preprod", "Pre-production"],
@@ -342,14 +342,14 @@ function Grid({
   const stickyW = isAsset
     ? W_ASSET.show + W_ASSET.promo + W_ASSET.people + W_ASSET.status
     : W_PROD.show + W_PROD.promo + W_PROD.part + W_PROD.artist + W_PROD.editor + W_PROD.status;
-  const stick = "sticky z-10 overflow-hidden bg-[#121216] border-b border-white/[0.05] px-2 py-1.5 align-middle";
+  const stick = "sticky z-10 overflow-hidden bg-[#222738] border-b border-white/[0.08] px-2 py-1.5 align-middle";
   const head =
-    "sticky top-0 z-40 overflow-hidden border-b border-white/[0.08] bg-[#17171d] px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500";
+    "sticky top-0 z-40 overflow-hidden border-b border-white/[0.08] bg-[#262b3d] px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-200";
 
   return (
     <div
       ref={scrollerRef}
-      className="max-h-[calc(100dvh-15rem)] overflow-auto rounded-xl border border-white/[0.08] bg-[#121216]"
+      className="max-h-[calc(100dvh-15rem)] overflow-auto rounded-xl border border-white/[0.12] bg-[#1a1e2b]"
     >
       <table
         className="border-separate border-spacing-0 text-left"
@@ -427,7 +427,7 @@ function Grid({
                       ? "bg-[#2a2218] text-amber-100/90"
                       : today
                         ? "bg-[#1d2447] text-[#9bb0ff]"
-                        : "bg-[#17171d] text-slate-400"
+                        : "bg-[#262b3d] text-slate-200"
                   }`}
                 >
                   {f.label}

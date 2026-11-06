@@ -41,7 +41,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className={`relative shrink-0 overflow-hidden border-r border-white/[0.07] bg-[#0e0e13] transition-[width] duration-200 ${
+      className={`relative shrink-0 overflow-hidden border-r border-white/[0.1] bg-[#161a26] transition-[width] duration-200 ${
         open ? "w-[220px]" : "w-12"
       }`}
     >

@@ -182,7 +182,7 @@ export function PlanBoard() {
               <Link
                 key={promo.id}
                 href={`/plan/${encodeURIComponent(promo.id)}`}
-                className="rounded-xl border border-white/[0.08] bg-[#121216] px-3 py-3 hover:border-white/[0.16]"
+                className="rounded-xl border border-white/[0.08] bg-[#222738] px-3 py-3 hover:border-white/[0.16]"
               >
                 <p className="text-[13px] font-bold text-white">{promo.showName || "—"}</p>
                 <p className="mt-0.5 truncate text-[12px] text-slate-400">{promo.promoName || "—"}</p>

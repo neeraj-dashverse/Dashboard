@@ -124,7 +124,7 @@ export function PromoDetail({ promoId }: { promoId: string }) {
       <SyncStrip />
 
       {/* Master Tracker — READ-ONLY (Neeraj edits these directly in Sheets) */}
-      <section className="rounded-xl border border-white/[0.08] bg-[#121216] p-4 space-y-4">
+      <section className="rounded-xl border border-white/[0.08] bg-[#222738] p-4 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <SectionTitle
@@ -212,7 +212,7 @@ export function PromoDetail({ promoId }: { promoId: string }) {
         const closedByAsset = assetClosedDate(promo);
         const suggested = assetsNeededBySuggestion(snap, promo);
         return (
-          <section className="rounded-xl border border-white/[0.08] bg-[#121216] p-4 space-y-3">
+          <section className="rounded-xl border border-white/[0.08] bg-[#222738] p-4 space-y-3">
             <SectionTitle
               title="My asset sheet · Pre Production"
               hint="Fill here, not the sheet · picked / planned / delay / append remarks"
@@ -474,7 +474,7 @@ export function PromoDetail({ promoId }: { promoId: string }) {
         const closedOn = assetClosedDate(promo);
         return (
           <section
-            className={`rounded-xl border bg-[#121216] p-4 space-y-3 ${
+            className={`rounded-xl border bg-[#222738] p-4 space-y-3 ${
               handoff.ready
                 ? "border-emerald-500/25"
                 : "border-rose-500/30 border-l-[3px] border-l-rose-500"
@@ -571,7 +571,7 @@ export function PromoDetail({ promoId }: { promoId: string }) {
 
       {promo.completeDeliverable && (
         <section
-          className={`rounded-xl border border-white/[0.08] bg-[#121216] p-4 ${
+          className={`rounded-xl border border-white/[0.08] bg-[#222738] p-4 ${
             completeLate > 0 ? "border-l-[3px] border-l-rose-500" : ""
           }`}
         >
@@ -610,7 +610,7 @@ export function PromoDetail({ promoId }: { promoId: string }) {
       {(promo.comments || promo.notes) && (
         <section className="grid gap-3 lg:grid-cols-2">
           {promo.comments && (
-            <div className="rounded-xl border border-white/[0.08] bg-[#121216] p-4">
+            <div className="rounded-xl border border-white/[0.08] bg-[#222738] p-4">
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
                 Comments
               </p>
@@ -652,7 +652,7 @@ export function PromoDetail({ promoId }: { promoId: string }) {
               return (
                 <article
                   key={partRow.id}
-                  className={`rounded-xl border border-white/[0.08] bg-[#121216] p-4 space-y-3 ${
+                  className={`rounded-xl border border-white/[0.08] bg-[#222738] p-4 space-y-3 ${
                     late > 0
                       ? "border-l-[3px] border-l-rose-500"
                       : partRow.blocked

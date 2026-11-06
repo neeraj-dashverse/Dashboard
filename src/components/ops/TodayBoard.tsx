@@ -86,7 +86,7 @@ export function TodayBoard() {
           <Link
             key={page.href}
             href={page.href}
-            className="rounded-xl border border-white/[0.08] bg-[#121216] px-4 py-3 hover:border-white/[0.16]"
+            className="rounded-xl border border-white/[0.08] bg-[#222738] px-4 py-3 hover:border-white/[0.16]"
           >
             <p className="text-[14px] font-bold text-white">{page.title}</p>
             <p className="mt-1 text-[12px] leading-5 text-slate-400">{page.line}</p>
