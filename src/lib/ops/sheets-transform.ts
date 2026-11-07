@@ -231,7 +231,7 @@ export function applyMasterDetail(promo: Promo, detail: Partial<Promo>) {
 }
 
 /** Promo stub for an asset-sheet row that isn't on Master Tracker yet. */
-export function stubPromoFromAsset(showName: string, scriptName: string, row: AssetTeamRow): Promo {
+export function stubPromo(showName: string, scriptName: string): Promo {
   const show = showName || "";
   const script = scriptName || "";
   return {
@@ -283,9 +283,15 @@ export function stubPromoFromAsset(showName: string, scriptName: string, row: As
     totalAssetGenerated: null,
     creditPerMinInhouse: null,
     lastTrackerUpdateAt: null,
-    assetTeam: row,
+    assetTeam: null,
     preProd: null,
   };
+}
+
+export function stubPromoFromAsset(showName: string, scriptName: string, row: AssetTeamRow): Promo {
+  const promo = stubPromo(showName, scriptName);
+  promo.assetTeam = row;
+  return promo;
 }
 
 // ── Parts (Production Tracker) ────────────────────────────────────────────────
@@ -296,9 +302,10 @@ export function parseParts(rows: Grid, animatorIdByName: Map<string, string>): P
   let seq = 0;
   for (const r of rows) {
     const showName = text(r[0]);
-    const promoName = text(r[1]);
+    // Blank Promo Name still belongs on the calendar. Keep the key as show| so it matches Pre Production.
+    const promoName = text(r[1]) ?? "";
     const partNo = num(r[2]);
-    if (!showName || !promoName || partNo == null) continue;
+    if (!showName || partNo == null) continue;
     if (normKey(showName) === "show_name") continue;
 
     const promoId = promoJoinKey(showName, promoName);
@@ -363,8 +370,8 @@ export function parsePreProd(rows: Grid): Map<string, PreProdAssetRow> {
   const map = new Map<string, PreProdAssetRow>();
   for (const r of rows) {
     const showName = text(r[0]);
-    const promoName = text(r[1]);
-    if (!showName || !promoName) continue;
+    const promoName = text(r[1]) ?? "";
+    if (!showName) continue;
     if (normKey(showName) === "show_name") continue;
     const id = promoJoinKey(showName, promoName);
     const remark = text(r[8]);

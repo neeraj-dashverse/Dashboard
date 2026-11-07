@@ -959,6 +959,16 @@ export type PlannerTab = "preprod" | "production";
  * Pre-production calendar: asset sheet Status (col E) must be WIP.
  * Send for Approval, Approved, Dropped, blank — all stay off.
  */
+/** Pre Production Tracker row that is not closed, even when Promo Name is blank. */
+export function isPreProdOpen(promo: Promo): boolean {
+  const pp = promo.preProd;
+  if (!pp) return false;
+  if (pp.closedDate) return false;
+  const st = (pp.status ?? "").toLowerCase();
+  if (/done|nil|dropped|approved/.test(st)) return false;
+  return true;
+}
+
 export function isAssetOpen(promo: Promo): boolean {
   if (!promo.assetTeam) return false;
   if (assetClosedDate(promo)) return false;
@@ -1180,7 +1190,7 @@ export function plannerPreprodRows(snap: OpsSnapshot): PlannerRow[] {
   const seen = new Set<string>();
   const out: PlannerRow[] = [];
   for (const promo of snap.promos) {
-    if (!isAssetOpen(promo)) continue;
+    if (!isAssetOpen(promo) && !isPreProdOpen(promo)) continue;
     const base = promo.id.split("#")[0];
     if (seen.has(base)) continue;
     seen.add(base);

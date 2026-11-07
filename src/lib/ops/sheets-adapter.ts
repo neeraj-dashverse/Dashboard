@@ -28,6 +28,7 @@ import {
   parsePreProd,
   parsePromos,
   parseQuality,
+  stubPromo,
   stubPromoFromAsset,
 } from "./sheets-transform";
 import {
@@ -219,6 +220,18 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
     }
     const stub = stubPromoFromAsset(a.showName, a.scriptName, a.row);
     stub.preProd = preProd.get(stub.id) ?? null;
+    promos.push(stub);
+  }
+  // Pre Production rows with no promo name, and no Master Tracker row, still belong on the calendar.
+  for (const [id, row] of preProd) {
+    const existing = promos.find((p) => p.id === id || p.id.startsWith(`${id}#`));
+    if (existing) {
+      if (!existing.preProd) existing.preProd = row;
+      continue;
+    }
+    const [show, script] = id.split("|");
+    const stub = stubPromo(show, script ?? "");
+    stub.preProd = row;
     promos.push(stub);
   }
 

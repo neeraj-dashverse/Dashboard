@@ -499,7 +499,7 @@ function Grid({
                         className="line-clamp-2 text-left text-[12px] font-semibold leading-tight text-slate-200 hover:underline"
                         title="Open promo"
                       >
-                        {r.promo.promoName || "—"}
+                        {r.promo.promoName || r.promo.showName || "—"}
                       </Link>
                     )}
                   </td>
