@@ -163,7 +163,7 @@ export function PlannerBoard() {
     if (tab === "preprod") {
       const a = r.promo.assetTeam;
       const names = [a?.artist1, a?.artist2, a?.artist3].filter(Boolean).join(", ");
-      return { artist: names || r.promo.preProd?.artist || null, editor: a?.artLead ?? null };
+      return { artist: names || r.promo.preProd?.artist || null, editor: null as string | null };
     }
     const p = r.part;
     if (!p) {

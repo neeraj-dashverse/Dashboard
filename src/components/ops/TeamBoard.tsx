@@ -6,11 +6,13 @@ import { formatDmy, teamGroups, type TeamGroupId } from "@/lib/ops/selectors";
 import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
 
-function freeOn(until: string | null, today: string): string {
-  if (!until) return "No plan date";
-  if (until < today) return `Should have been free ${formatDmy(until)}`;
-  if (until === today) return "Free today";
-  return `Free ${formatDmy(until)}`;
+/** An open production or asset row means the person is still plotted, even after the date. */
+function whenFree(until: string | null, today: string, plotted: boolean): string {
+  if (!plotted) return "Free now";
+  if (!until) return "Still plotted";
+  if (until > today) return `Free ${formatDmy(until)}`;
+  if (until === today) return "Due today";
+  return `Still plotted · due ${formatDmy(until)}`;
 }
 
 export function TeamBoard() {
@@ -81,8 +83,12 @@ export function TeamBoard() {
                         {index === 0 && (
                           <td rowSpan={rows.length} className="px-4 py-3 font-semibold text-white">
                             {person.name}
-                            <span className="mt-1 block text-[11px] font-medium text-emerald-200">
-                              {person.holds.length === 0 ? "Free now" : freeOn(person.freeAt, snap.today)}
+                            <span
+                              className={`mt-1 block text-[11px] font-medium ${
+                                person.holds.length === 0 ? "text-emerald-200" : "text-slate-300"
+                              }`}
+                            >
+                              {whenFree(person.freeAt, snap.today, person.holds.length > 0)}
                             </span>
                           </td>
                         )}
@@ -105,7 +111,7 @@ export function TeamBoard() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-[12px] font-semibold text-[#c5d4ff]">
-                          {hold ? freeOn(hold.until, snap.today) : "Free now"}
+                          {whenFree(hold?.until ?? null, snap.today, !!hold)}
                         </td>
                       </tr>
                     ));

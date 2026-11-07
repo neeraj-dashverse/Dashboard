@@ -160,7 +160,7 @@ export function promoRecords(snap: OpsSnapshot): PromoRecord[] {
     const parts = (partGroups.get(id) ?? []).slice().sort((a, b) => a.partNo - b.partNo);
     const [showFallback, nameFallback] = id.split("|");
     const asset = promo?.assetTeam;
-    const assetPeople = [asset?.artist1, asset?.artist2, asset?.artist3, asset?.artLead]
+    const assetPeople = [asset?.artist1, asset?.artist2, asset?.artist3]
       .map((name) => name?.trim())
       .filter((name): name is string => !!name)
       .join(", ");
@@ -955,26 +955,26 @@ export type DayLane = {
 
 export type PlannerTab = "preprod" | "production";
 
+function markedWip(status: string | null | undefined): boolean {
+  const st = (status ?? "").toLowerCase().trim();
+  if (!st || /approved|dropped|done|nil|send for/.test(st)) return false;
+  return /\bwip\b/.test(st);
+}
+
 /**
- * Pre-production calendar: asset sheet Status (col E) must be WIP.
- * Send for Approval, Approved, Dropped, blank — all stay off.
+ * Pre-production calendar only. Approved, sent for approval, dropped, and blank stay off.
+ * A blank promo name is fine; the status still has to be WIP.
  */
-/** Pre Production Tracker row that is not closed, even when Promo Name is blank. */
 export function isPreProdOpen(promo: Promo): boolean {
   const pp = promo.preProd;
-  if (!pp) return false;
-  if (pp.closedDate) return false;
-  const st = (pp.status ?? "").toLowerCase();
-  if (/done|nil|dropped|approved/.test(st)) return false;
-  return true;
+  if (!pp || pp.closedDate) return false;
+  return markedWip(pp.status);
 }
 
 export function isAssetOpen(promo: Promo): boolean {
   if (!promo.assetTeam) return false;
   if (assetClosedDate(promo)) return false;
-  const st = (promo.assetTeam.assetsStatus ?? "").toLowerCase().trim();
-  if (!/\bwip\b/.test(st)) return false;
-  if (st.includes("approved") || st.includes("send for") || st.includes("dropped")) return false;
+  if (!markedWip(promo.assetTeam.assetsStatus)) return false;
   const remarks = [
     promo.assetTeam.remarks,
     promo.assetTeam.dashverseNotes,
@@ -1034,12 +1034,21 @@ function splitPersonNames(v: string | null | undefined): string[] {
     .filter((s) => s.length > 0 && !/^(tbd|n\/a|na|nil|none|-)$/i.test(s));
 }
 
-/** Latest planned mark on the row, else the row's planned date. */
+/**
+ * When this open row lets the person go.
+ * Production Tracker "Planned and plotted date" counts, even with no Plan-page cell.
+ */
 function rowRelease(row: PlannerRow): { until: string | null; plan: string } {
-  const marks = [...row.planMarks].sort((a, b) => a.date.localeCompare(b.date));
-  const last = marks[marks.length - 1];
-  if (last) return { until: last.date, plan: last.note };
-  if (row.plannedDate) return { until: row.plannedDate, plan: "Plan" };
+  const dates: { until: string; plan: string }[] = [];
+  for (const mark of row.planMarks) {
+    if (mark.date) dates.push({ until: mark.date, plan: mark.note });
+  }
+  if (row.part?.plannedPlottedDate) dates.push({ until: row.part.plannedPlottedDate, plan: "Plotted" });
+  if (row.part?.deadline) dates.push({ until: row.part.deadline, plan: "Deadline" });
+  if (row.plannedDate) dates.push({ until: row.plannedDate, plan: "Plan" });
+  dates.sort((a, b) => a.until.localeCompare(b.until));
+  const last = dates[dates.length - 1];
+  if (last) return last;
   return { until: null, plan: "No plan date" };
 }
 
@@ -1078,8 +1087,7 @@ export function teamGroups(snap: OpsSnapshot): TeamGroup[] {
       doing: currentDoing(row, snap.today, tab),
       plan: rel.plan,
       until: rel.until,
-      lateDays:
-        row.plannedDate && row.plannedDate < snap.today ? daysLate(row.plannedDate, snap.today) : 0,
+      lateDays: rel.until && rel.until < snap.today ? daysLate(rel.until, snap.today) : 0,
     });
   };
 
@@ -1107,9 +1115,8 @@ export function teamGroups(snap: OpsSnapshot): TeamGroup[] {
   for (const row of plannerPreprodRows(snap)) {
     const title = `${row.promo.showName || "—"} · ${row.promo.promoName || "—"}`;
     const team = row.promo.assetTeam;
-    const names = [team?.artist1, team?.artist2, team?.artist3, team?.artLead].flatMap((n) =>
-      splitPersonNames(n)
-    );
+    // ArtLead is QC, not an asset artist, so that name stays off the team list.
+    const names = [team?.artist1, team?.artist2, team?.artist3].flatMap((n) => splitPersonNames(n));
     for (const name of names) addHold("assets", name, row, title, "preprod");
   }
 
@@ -1145,7 +1152,6 @@ export function teamGroups(snap: OpsSnapshot): TeamGroup[] {
       promo.assetTeam?.artist1,
       promo.assetTeam?.artist2,
       promo.assetTeam?.artist3,
-      promo.assetTeam?.artLead,
       promo.preProd?.artist,
     ])
   );
@@ -1153,8 +1159,8 @@ export function teamGroups(snap: OpsSnapshot): TeamGroup[] {
 
   const sortPeople = (people: TeamPerson[]) =>
     people.sort((a, b) => {
-      if (a.holds.length === 0 && b.holds.length > 0) return -1;
-      if (b.holds.length === 0 && a.holds.length > 0) return 1;
+      if (a.holds.length > 0 && b.holds.length === 0) return -1;
+      if (b.holds.length > 0 && a.holds.length === 0) return 1;
       const lateA = Math.max(0, ...a.holds.map((h) => h.lateDays));
       const lateB = Math.max(0, ...b.holds.map((h) => h.lateDays));
       if (lateA !== lateB) return lateB - lateA;
@@ -1185,12 +1191,18 @@ export function teamGroups(snap: OpsSnapshot): TeamGroup[] {
   });
 }
 
-/** One row per OPEN asset-sheet promo — not Master Tracker closed runs. */
+/** One row per promo whose asset sheet or pre-production sheet is WIP. Approved stays off. */
 export function plannerPreprodRows(snap: OpsSnapshot): PlannerRow[] {
   const seen = new Set<string>();
   const out: PlannerRow[] = [];
   for (const promo of snap.promos) {
-    if (!isAssetOpen(promo) && !isPreProdOpen(promo)) continue;
+    const assetStatus = promo.assetTeam?.assetsStatus ?? "";
+    const preStatus = promo.preProd?.status ?? "";
+    if (/approved/i.test(assetStatus) || /approved/i.test(preStatus)) continue;
+    const onAssetSheet = !!promo.assetTeam?.assetsStatus?.trim();
+    if (onAssetSheet) {
+      if (!isAssetOpen(promo)) continue;
+    } else if (!isPreProdOpen(promo)) continue;
     const base = promo.id.split("#")[0];
     if (seen.has(base)) continue;
     seen.add(base);

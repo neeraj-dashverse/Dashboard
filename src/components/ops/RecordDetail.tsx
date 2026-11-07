@@ -315,7 +315,7 @@ function preproductionLines(
   pre: PreProdAssetRow | null | undefined
 ): string[] {
   const people = uniqueText([
-    [asset?.artist1, asset?.artist2, asset?.artist3, asset?.artLead].filter(Boolean).join(", "),
+    [asset?.artist1, asset?.artist2, asset?.artist3].filter(Boolean).join(", "),
     pre?.artist,
   ]);
   const start = when(asset?.startDate || pre?.startDate);

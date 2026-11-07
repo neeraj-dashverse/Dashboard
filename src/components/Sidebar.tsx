@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 const navItems = [
+  { href: "/ask", label: "Ask AI", icon: "✦" },
   { href: "/planner", label: "Calendar", icon: "▦" },
   { href: "/plan", label: "Plan", icon: "◷" },
   { href: "/team", label: "Team", icon: "☰" },
