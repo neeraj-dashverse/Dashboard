@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { plannerPreprodRows, plannerRows, slotLabel } from "@/lib/ops/selectors";
+import { useMemo } from "react";
+import { assetStartDate, formatDmy, plannerPreprodRows, plannerRows, slotLabel } from "@/lib/ops/selectors";
 import type { PlannerCell, Promo } from "@/lib/ops/types";
 import { useOps } from "./OpsProvider";
 
@@ -21,70 +21,6 @@ function readPlan(
   if (!hit) return { date: "", slot: null };
   const slot = SLOTS.find((s) => hit.text.toLowerCase().includes(s.toLowerCase())) ?? null;
   return { date: hit.date, slot };
-}
-
-export function RemarkBox({ promo, partNo }: { promo: Promo; partNo: number }) {
-  const { snap, act, busy } = useOps();
-  const [draft, setDraft] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const rows = snap.planRemarks.filter((r) => r.promoId === promo.id && r.partNo === partNo);
-
-  const add = async () => {
-    const body = draft.trim();
-    if (!body) return;
-    setError(null);
-    try {
-      await act({
-        type: "append_plan_remark",
-        promoId: promo.id,
-        partNo,
-        body,
-        showName: promo.showName,
-        promoName: promo.promoName,
-      });
-      setDraft("");
-    } catch {
-      setError("Couldn't save that remark.");
-    }
-  };
-
-  return (
-    <div className="space-y-1.5">
-      {rows.length > 0 && (
-        <ul className="max-h-28 space-y-1 overflow-y-auto">
-          {rows.map((r) => (
-            <li key={`${r.at}-${r.body}`} className="text-[11px] leading-4 text-slate-300">
-              <span className="text-slate-500">{r.at.slice(0, 16).replace("T", " ")} · </span>
-              {r.body}
-            </li>
-          ))}
-        </ul>
-      )}
-      <form
-        className="flex gap-1"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void add();
-        }}
-      >
-        <input
-          value={draft}
-          disabled={busy}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Delay or issue"
-          className="min-w-0 flex-1 rounded-md border border-white/[0.1] bg-[#0e0e13] px-2 py-1 text-[12px] text-white placeholder:text-slate-600"
-        />
-        <button
-          type="submit"
-          disabled={busy || !draft.trim()}
-          className="rounded-md bg-white/[0.08] px-2 py-1 text-[11px] font-bold text-slate-200 disabled:opacity-40"
-        >
-          Add
-        </button>
-      </form>
-      {error && <p className="text-[11px] text-rose-300">{error}</p>}
-    </div>
-  );
 }
 
 export function PlanWhen({
@@ -132,7 +68,6 @@ export function PlanWhen({
           </button>
         ))}
       </div>
-      <RemarkBox promo={promo} partNo={partNo} />
     </div>
   );
 }
@@ -140,62 +75,57 @@ export function PlanWhen({
 export function PlanBoard() {
   const { snap } = useOps();
 
-  const assets = useMemo(() => plannerPreprodRows(snap), [snap]);
-  const parts = useMemo(() => plannerRows(snap), [snap]);
-
   const promos = useMemo(() => {
     const map = new Map<string, Promo>();
-    for (const r of assets) map.set(r.promo.id, r.promo);
-    for (const r of parts) map.set(r.promo.id, r.promo);
-    return [...map.values()];
-  }, [assets, parts]);
+    for (const row of plannerPreprodRows(snap)) map.set(row.promo.id, row.promo);
+    for (const row of plannerRows(snap)) map.set(row.promo.id, row.promo);
+    return [...map.values()].sort((a, b) => {
+      const startA = assetStartDate(a, snap.today) ?? "";
+      const startB = assetStartDate(b, snap.today) ?? "";
+      if (startA !== startB) return startB.localeCompare(startA);
+      return (a.showName || "").localeCompare(b.showName || "");
+    });
+  }, [snap]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-          PocketFM · Planning
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Plan</p>
+        <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Promos</h1>
+        <p className="mt-1 max-w-3xl text-[12px] leading-5 text-slate-400">
+          Newest asset start date first. Open a promo to set the plan and record it. First half is by 3:00pm IST,
+          second half by 8:00pm, and EOD is 8:00pm.
         </p>
-        <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Plan</h1>
-        <p className="mt-1 max-w-3xl text-[13px] leading-5 text-slate-400">
-          Open a promo tile to set the date and mark 1st half, 2nd half, or EOD. Those marks show
-          on the calendar. Remarks stay on the part. Dates save to the Planner tab, each remark is
-          a new row on the Remarks tab, both on {snap.workingSource.spreadsheetName}.
-        </p>
-        <a
-          href={snap.workingSource.url}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-2 inline-block text-[12px] font-semibold text-[#9bb0ff] hover:underline"
-        >
-          Open {snap.workingSource.spreadsheetName} ↗
-        </a>
       </div>
-
-      <section className="space-y-3">
-        <h2 className="text-[13px] font-bold text-white">Promos</h2>
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-          {promos.map((promo) => {
-            const assetOn = assets.some((r) => r.promo.id === promo.id);
-            const partCount = parts.filter((r) => r.promo.id === promo.id).length;
-            return (
-              <Link
-                key={promo.id}
-                href={`/plan/${encodeURIComponent(promo.id)}`}
-                className="rounded-xl border border-white/[0.08] bg-[#222738] px-3 py-3 hover:border-white/[0.16]"
-              >
-                <p className="text-[13px] font-bold text-white">{promo.showName || "—"}</p>
-                <p className="mt-0.5 truncate text-[12px] text-slate-400">{promo.promoName || "—"}</p>
-                <p className="mt-2 text-[11px] text-slate-500">
-                  {promo.cps ? `Cps ${promo.cps}` : "No Cps"}
-                  {assetOn ? " · assets" : ""}
-                  {partCount ? ` · ${partCount} part${partCount > 1 ? "s" : ""}` : ""}
-                </p>
-              </Link>
-            );
-          })}
-        </div>
-      </section>
+      <div className="overflow-hidden rounded-xl border border-white/[0.12]">
+        <table className="w-full text-left text-[13px]">
+          <thead className="text-[10px] uppercase tracking-wider text-slate-300">
+            <tr>
+              <th className="px-4 py-3 font-semibold">Promo</th>
+              <th className="px-4 py-3 font-semibold">Show</th>
+              <th className="px-4 py-3 font-semibold">Asset start</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/[0.08]">
+            {promos.map((promo) => (
+              <tr key={promo.id}>
+                <td className="px-4 py-3">
+                  <Link
+                    href={`/plan/${encodeURIComponent(promo.id)}`}
+                    className="font-semibold text-white hover:underline"
+                  >
+                    {promo.promoName || promo.showName || "—"}
+                  </Link>
+                </td>
+                <td className="px-4 py-3 text-slate-300">{promo.showName || "—"}</td>
+                <td className="px-4 py-3 text-slate-300">
+                  {formatDmy(assetStartDate(promo, snap.today)) || "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

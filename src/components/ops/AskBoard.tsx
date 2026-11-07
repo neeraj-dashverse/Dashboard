@@ -43,8 +43,8 @@ export function AskBoard() {
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Ask AI</p>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Ask the sheets</h1>
         <p className="mt-1 text-[12px] leading-5 text-slate-400">
-          Ask where an artist is plotted, what rating and feedback they have, or when a promo is plotted to close.
-          The answer is taken from the production, team, and quality sheets.
+          Ask where an artist is plotted, their rating, feedback, and productivity, or when a promo is plotted to close.
+          Answers use the production, team, quality, and daily productivity sheets.
         </p>
       </div>
       <SyncStrip />

@@ -329,14 +329,47 @@ export const sheetsAdapter: OpsAdapter = {
     // made the click wait several seconds.
     if (action.type === "record_plan_part") {
       try {
+        const at = new Date().toISOString();
         await syncPlanPart({
           showName: action.showName || "",
           promoName: action.promoName || "",
           promoId: action.promoId,
           partNo: action.partNo,
-          updatedAt: new Date().toISOString().slice(0, 10),
+          updatedAt: at.slice(0, 10),
           slots: action.slots,
         });
+        const body = action.slots
+          .filter((slot) => slot.date.trim())
+          .map((slot) => `${slot.label} ${slot.date}`)
+          .join("; ");
+        if (body) {
+          try {
+            await appendPlanRemark({
+              showName: action.showName || "",
+              promoName: action.promoName || "",
+              promoId: action.promoId,
+              partNo: action.partNo,
+              body,
+              at,
+            });
+            if (hasLiveHydration()) {
+              applyAction(
+                {
+                  type: "append_plan_remark",
+                  promoId: action.promoId,
+                  partNo: action.partNo,
+                  body,
+                  at,
+                  showName: action.showName,
+                  promoName: action.promoName,
+                },
+                { recordWrite: false }
+              );
+            }
+          } catch (err) {
+            console.error("[ops] Plan history row failed:", err);
+          }
+        }
       } catch (err) {
         console.error("[ops] Plan record failed:", err);
         throw err;
@@ -348,7 +381,7 @@ export const sheetsAdapter: OpsAdapter = {
             (c) => c.promoId === action.promoId && c.partNo === action.partNo && re.test(c.text)
           );
           for (const old of prev) {
-            if (old.date === slot.date && slot.date) continue;
+            if (old.date === slot.date) continue;
             applyAction(
               {
                 type: "set_plan_cell",

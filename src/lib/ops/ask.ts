@@ -1,5 +1,6 @@
 import type { OpsSnapshot, Part, Promo, QualityReview } from "./types";
 import {
+  animatorProductivity,
   daysLate,
   formatDmy,
   formatDuration,
@@ -48,6 +49,7 @@ function uniqueNames(snap: OpsSnapshot): string[] {
     review.animators.forEach(add);
     review.editors.forEach(add);
   }
+  for (const log of snap.dailyLogs) add(log.artist);
   for (const group of teamGroups(snap)) group.people.forEach((person) => add(person.name));
   return [...names];
 }
@@ -151,6 +153,39 @@ function answerPerson(snap: OpsSnapshot, name: string): string[] {
   } else {
     lines.push("Feedback:");
     lines.push(...allNotes.slice(0, 6));
+  }
+  lines.push(...productivityLines(snap, name));
+  return lines;
+}
+
+function productivityLines(snap: OpsSnapshot, name: string): string[] {
+  const person = animatorProductivity(snap).find((row) => norm(row.name) === norm(name));
+  const lines: string[] = [];
+  if (!person) {
+    lines.push(`No productivity row for ${name}.`);
+    return lines;
+  }
+  lines.push(
+    `Productivity: ${person.openParts} open part${person.openParts === 1 ? "" : "s"}, ${person.deliveredParts} delivered.`
+  );
+  if (person.daysWorked > 0) {
+    lines.push(
+      `Worked ${person.daysWorked} day${person.daysWorked === 1 ? "" : "s"} on the daily sheet${
+        person.minutesPerDay != null ? `, about ${person.minutesPerDay} min/day` : ""
+      }.`
+    );
+  } else {
+    lines.push("The daily productivity sheet has no rows for this name.");
+  }
+  if (person.avgDelay != null) {
+    lines.push(`Average delay against the rough-cut plan is ${person.avgDelay} day${person.avgDelay === 1 ? "" : "s"}.`);
+  }
+  const notes = snap.dailyLogs
+    .filter((log) => norm(log.artist) === norm(name) && log.remarks?.trim())
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 3);
+  for (const note of notes) {
+    lines.push(`Daily note ${formatDmy(note.date)}: ${note.remarks}`);
   }
   return lines;
 }

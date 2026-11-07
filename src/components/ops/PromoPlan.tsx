@@ -2,19 +2,12 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { assetClosedDate, formatDmy } from "@/lib/ops/selectors";
+import { assetClosedDate, formatDmy, slotLabel } from "@/lib/ops/selectors";
 import type { PlannerCell, Promo } from "@/lib/ops/types";
-import { RemarkBox } from "./PlanBoard";
 import { useOps } from "./OpsProvider";
 
-function detail(label: string, value: string | null | undefined) {
-  return (
-    <div>
-      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
-      <p className="mt-0.5 text-[13px] text-slate-200">{value || "—"}</p>
-    </div>
-  );
-}
+const TIMES = ["First half", "Second half", "EOD"] as const;
+type TimeSlot = (typeof TIMES)[number];
 
 export function PromoPlan({ promoId }: { promoId: string }) {
   const { snap } = useOps();
@@ -31,14 +24,13 @@ export function PromoPlan({ promoId }: { promoId: string }) {
   }
 
   const asset = promo.assetTeam;
-  const plotters = [asset?.artist1, asset?.artist2, asset?.artist3].filter(Boolean).join(", ");
   const byPart = new Map<number, (typeof snap.parts)[number]>();
   for (const part of snap.parts) {
-    if (part.promoId === promo.id) byPart.set(part.partNo, part);
+    if (part.promoId === promo.id || part.promoId.split("#")[0] === promo.id.split("#")[0]) {
+      byPart.set(part.partNo, part);
+    }
   }
   const parts = [...byPart.values()].sort((a, b) => a.partNo - b.partNo);
-  const animators = [...new Set(parts.map((p) => p.artist).filter(Boolean))].join(", ");
-  const editors = [...new Set(parts.map((p) => p.editors).filter(Boolean))].join(", ");
 
   const promoClosed = Boolean(promo.trackerStatus && /closed/i.test(promo.trackerStatus));
   const status = (asset?.assetsStatus ?? "").toLowerCase();
@@ -53,36 +45,26 @@ export function PromoPlan({ promoId }: { promoId: string }) {
         </Link>
         <p className="mt-3 text-[12px] font-semibold text-slate-400">{promo.showName || "Promo"}</p>
         <h1 className="mt-1 text-2xl font-extrabold text-white">{promo.promoName || promo.showName || "—"}</h1>
+        <p className="mt-1 text-[12px] text-slate-400">
+          First half is by 3:00pm IST. Second half is by 8:00pm. EOD is 8:00pm. Record saves the date and the time.
+        </p>
       </div>
 
-      <section className="grid gap-3 rounded-xl border border-white/[0.08] bg-[#222738] p-4 sm:grid-cols-3 lg:grid-cols-4">
-        {detail("Cps", promo.cps)}
-        {detail("Status", promo.trackerStatus)}
-        {detail("Priority", promo.priority)}
-        {detail("Asset status", asset?.assetsStatus)}
-        {detail("Asset artists", plotters)}
-        {detail("Art lead", asset?.artLead)}
-        {detail("Animators", animators)}
-        {detail("Editors", editors)}
-      </section>
-
       <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
-        <table className="w-full min-w-[880px] text-left text-[12px]">
+        <table className="w-full min-w-[760px] text-left text-[12px]">
           <thead className="bg-[#17171d] text-[10px] font-bold uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-3 py-2"> </th>
-              <th className="px-3 py-2">Pick date</th>
+              <th className="px-3 py-2">Assets</th>
               <th className="px-3 py-2">Rough cut</th>
               <th className="px-3 py-2">Final cut</th>
               <th className="px-3 py-2">Sound</th>
               <th className="px-3 py-2">Record</th>
-              <th className="px-3 py-2">Remarks</th>
             </tr>
           </thead>
           <tbody>
             <tr className="border-t border-white/[0.06]">
               <td className="px-3 py-3 font-semibold text-white">Asset</td>
-              <td className="px-3 py-3 text-slate-300">{formatDmy(asset?.startDate)}</td>
               <PlanDates
                 promo={promo}
                 partNo={0}
@@ -90,59 +72,48 @@ export function PromoPlan({ promoId }: { promoId: string }) {
                 open={!promoClosed && !assetsClosed}
                 slots={[
                   { label: "Assets", match: "asset", enabled: true },
+                  { label: "Rough cut", match: "rough cut|first cut|first animation|first edit", enabled: false },
                   { label: "Final cut", match: "final cut|second cut|correction close", enabled: false },
                   { label: "Sound", match: "sound", enabled: false },
                 ]}
               />
-              <td className="min-w-[220px] px-3 py-3 align-top">
-                <RemarkBox promo={promo} partNo={0} />
-              </td>
             </tr>
             {parts.map((part) => (
               <tr key={part.id} className="border-t border-white/[0.06]">
-                <td className="px-3 py-3">
-                  <p className="font-semibold text-white">Part {part.partNo}</p>
-                  <p className="text-[11px] text-slate-500">
-                    {part.artist || "No animator"}
-                    {part.editors ? ` · ${part.editors}` : ""}
-                  </p>
-                </td>
-                <td className="px-3 py-3 text-slate-300">
-                  {formatDmy(part.aniStartDate || part.plannedPlottedDate)}
-                </td>
+                <td className="px-3 py-3 font-semibold text-white">Part {part.partNo}</td>
                 <PlanDates
                   promo={promo}
                   partNo={part.partNo}
                   cells={snap.plannerCells}
                   open={!promoClosed && part.stage !== "delivered"}
                   slots={[
+                    { label: "Assets", match: "asset", enabled: false },
                     { label: "Rough cut", match: "rough cut|first cut|first animation|first edit", enabled: true },
                     { label: "Final cut", match: "final cut|second cut|correction close", enabled: true },
                     { label: "Sound", match: "sound", enabled: true },
                   ]}
                 />
-                <td className="min-w-[220px] px-3 py-3 align-top">
-                  <RemarkBox promo={promo} partNo={part.partNo} />
-                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="text-[11px] text-slate-600">
-        Type the dates for a part, then Record. That writes them to the sheet. Change a date and
-        Record again if it was typed wrong. Remarks sit beside Record.
-      </p>
     </div>
   );
 }
 
-function savedDate(cells: PlannerCell[], promoId: string, partNo: number, match: string): string {
+function savedPlan(
+  cells: PlannerCell[],
+  promoId: string,
+  partNo: number,
+  match: string
+): { date: string; time: TimeSlot | null } {
   const re = new RegExp(match, "i");
   const hit = cells
     .filter((c) => c.promoId === promoId && c.partNo === partNo && c.date && re.test(c.text))
-    .sort((a, b) => a.date.localeCompare(b.date))[0];
-  return hit?.date ?? "";
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  const time = TIMES.find((slot) => slotLabel(hit?.text ?? "") === slotLabel(slot)) ?? null;
+  return { date: hit?.date ?? "", time };
 }
 
 function PlanDates({
@@ -163,12 +134,20 @@ function PlanDates({
   const [localSaved, setLocalSaved] = useState<Record<string, string> | null>(null);
   const flight = useRef(Promise.resolve());
   const gen = useRef(0);
-  const fromSheet = Object.fromEntries(
-    slots.map((s) => [s.label, savedDate(cells, promo.id, partNo, s.match)])
+  const fromSheet = Object.fromEntries(slots.map((s) => [s.label, savedPlan(cells, promo.id, partNo, s.match)]));
+  const savedDates = localSaved ?? Object.fromEntries(slots.map((s) => [s.label, fromSheet[s.label]?.date ?? ""]));
+  const [draft, setDraft] = useState<Record<string, string>>(
+    Object.fromEntries(slots.map((s) => [s.label, fromSheet[s.label]?.date ?? ""]))
   );
-  const saved = localSaved ?? fromSheet;
-  const [draft, setDraft] = useState<Record<string, string>>(fromSheet);
-  const dirty = slots.some((s) => s.enabled && (draft[s.label] ?? "") !== (saved[s.label] ?? ""));
+  const [times, setTimes] = useState<Record<string, TimeSlot | null>>(
+    Object.fromEntries(slots.map((s) => [s.label, fromSheet[s.label]?.time ?? null]))
+  );
+  const dirty = slots.some(
+    (s) =>
+      s.enabled &&
+      ((draft[s.label] ?? "") !== (savedDates[s.label] ?? "") ||
+        (times[s.label] ?? null) !== (fromSheet[s.label]?.time ?? null))
+  );
 
   const record = () => {
     const mine = ++gen.current;
@@ -183,7 +162,11 @@ function PlanDates({
       promoName: promo.promoName,
       slots: slots
         .filter((s) => s.enabled)
-        .map((s) => ({ label: s.label, match: s.match, date: nextDraft[s.label] ?? "" })),
+        .map((s) => ({
+          label: times[s.label] ? `${s.label} · ${times[s.label]}` : s.label,
+          match: s.match,
+          date: nextDraft[s.label] ?? "",
+        })),
     };
     flight.current = flight.current
       .catch(() => undefined)
@@ -201,15 +184,41 @@ function PlanDates({
         <td key={slot.label} className="px-3 py-3">
           {!slot.enabled || !open ? (
             <span className={slot.enabled ? "font-semibold text-slate-200" : "text-slate-600"}>
-              {slot.enabled ? formatDmy(saved[slot.label]) || "—" : "—"}
+              {slot.enabled
+                ? `${formatDmy(savedDates[slot.label]) || "—"}${times[slot.label] ? ` · ${slotLabel(times[slot.label] ?? "") ?? times[slot.label]}` : ""}`
+                : "—"}
             </span>
           ) : (
-            <input
-              type="date"
-              value={draft[slot.label] ?? ""}
-              onChange={(e) => setDraft((d) => ({ ...d, [slot.label]: e.target.value }))}
-              className="rounded-md border border-white/[0.1] bg-[#0e0e13] px-2 py-1 text-[12px] text-white"
-            />
+            <div className="space-y-1.5">
+              <input
+                type="date"
+                value={draft[slot.label] ?? ""}
+                onChange={(e) => setDraft((d) => ({ ...d, [slot.label]: e.target.value }))}
+                className="rounded-md border border-white/[0.1] bg-[#0e0e13] px-2 py-1 text-[12px] text-white"
+              />
+              <div className="flex flex-wrap gap-1">
+                {TIMES.map((time) => (
+                  <button
+                    key={time}
+                    type="button"
+                    disabled={!draft[slot.label]}
+                    onClick={() =>
+                      setTimes((current) => ({
+                        ...current,
+                        [slot.label]: current[slot.label] === time ? null : time,
+                      }))
+                    }
+                    className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                      times[slot.label] === time
+                        ? "bg-[#4361ee]/40 text-white"
+                        : "bg-white/[0.06] text-slate-400"
+                    } disabled:opacity-40`}
+                  >
+                    {slotLabel(time) ?? time}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </td>
       ))}

@@ -476,7 +476,7 @@ function Grid({
                   >
                     {(isAsset || r.firstOfPromo) && (
                       <Link
-                        href={`/plan/${encodeURIComponent(r.promo.id)}`}
+                        href={`/record/${encodeURIComponent(r.promo.id)}`}
                         className="line-clamp-2 text-[12px] font-bold leading-tight text-white hover:underline"
                         title={r.promo.showName || "Open promo"}
                       >
@@ -495,7 +495,7 @@ function Grid({
                   >
                     {(isAsset || r.firstOfPromo) && (
                       <Link
-                        href={`/plan/${encodeURIComponent(r.promo.id)}`}
+                        href={`/record/${encodeURIComponent(r.promo.id)}`}
                         className="line-clamp-2 text-left text-[12px] font-semibold leading-tight text-slate-200 hover:underline"
                         title="Open promo"
                       >
@@ -524,7 +524,7 @@ function Grid({
                         className={stick}
                       >
                         <Link
-                          href={`/plan/${encodeURIComponent(r.promo.id)}`}
+                          href={`/record/${encodeURIComponent(r.promo.id)}`}
                           className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-300 hover:text-white"
                           title="Open promo"
                         >
