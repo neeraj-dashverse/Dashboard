@@ -63,6 +63,8 @@ function krockButtons(reviews: QualityReview[], partNo: number) {
 
 export function RecordDetail({ promoId }: { promoId: string }) {
   const { snap } = useOps();
+  const [openParts, setOpenParts] = useState<number[]>([]);
+  const [assetsOpen, setAssetsOpen] = useState(false);
   const base = promoId.split("#")[0];
   const promo =
     snap.promos.find((item) => item.id === promoId) ??
@@ -108,8 +110,6 @@ export function RecordDetail({ promoId }: { promoId: string }) {
     .filter((date): date is string => !!date)
     .sort();
   const workedTotal = parts.reduce((sum, part) => sum + (part.workedDurationSec || 0), 0);
-  const [openParts, setOpenParts] = useState<number[]>([]);
-  const [assetsOpen, setAssetsOpen] = useState(false);
   const assetRows = assetStageRows(
     asset?.correctionsEndDate || asset?.endDate || pre?.closedDate,
     pre?.plannedDate,
