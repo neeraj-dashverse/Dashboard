@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 const navItems = [
   { href: "/ask", label: "Ask AI", icon: "✦" },
   { href: "/planner", label: "Calendar", icon: "▦" },
-  { href: "/plan", label: "Plan", icon: "◷" },
   { href: "/team", label: "Team", icon: "☰" },
   { href: "/productivity", label: "Productivity", icon: "◈" },
   { href: "/record", label: "Record", icon: "≡" },

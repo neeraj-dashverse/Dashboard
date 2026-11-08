@@ -72,7 +72,13 @@ export function PlanWhen({
   );
 }
 
-export function PlanBoard() {
+export function PlanBoard({
+  compact = false,
+  onSelect,
+}: {
+  compact?: boolean;
+  onSelect?: (promoId: string) => void;
+}) {
   const { snap } = useOps();
 
   const promos = useMemo(() => {
@@ -91,10 +97,9 @@ export function PlanBoard() {
     <div className="space-y-5">
       <div>
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Plan</p>
-        <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Promos</h1>
-        <p className="mt-1 max-w-3xl text-[12px] leading-5 text-slate-400">
-          Newest asset start date first. Open a promo to set the plan and record it. First half is by 3:00pm IST,
-          second half by 8:00pm, and EOD is 8:00pm.
+        {!compact && <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Promos</h1>}
+        <p className={`text-[12px] leading-5 text-slate-400 ${compact ? "mt-1" : "mt-1 max-w-3xl"}`}>
+          Newest asset start first. First half is by 3:00pm IST, second half by 8:00pm, EOD is 8:00pm.
         </p>
       </div>
       <div className="overflow-hidden rounded-xl border border-white/[0.12]">
@@ -110,12 +115,22 @@ export function PlanBoard() {
             {promos.map((promo) => (
               <tr key={promo.id}>
                 <td className="px-4 py-3">
-                  <Link
-                    href={`/plan/${encodeURIComponent(promo.id)}`}
-                    className="font-semibold text-white hover:underline"
-                  >
-                    {promo.promoName || promo.showName || "—"}
-                  </Link>
+                  {onSelect ? (
+                    <button
+                      type="button"
+                      onClick={() => onSelect(promo.id)}
+                      className="text-left font-semibold text-white hover:underline"
+                    >
+                      {promo.promoName || promo.showName || "—"}
+                    </button>
+                  ) : (
+                    <Link
+                      href={`/plan/${encodeURIComponent(promo.id)}`}
+                      className="font-semibold text-white hover:underline"
+                    >
+                      {promo.promoName || promo.showName || "—"}
+                    </Link>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-slate-300">{promo.showName || "—"}</td>
                 <td className="px-4 py-3 text-slate-300">

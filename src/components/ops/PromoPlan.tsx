@@ -9,15 +9,27 @@ import { useOps } from "./OpsProvider";
 const TIMES = ["First half", "Second half", "EOD"] as const;
 type TimeSlot = (typeof TIMES)[number];
 
-export function PromoPlan({ promoId }: { promoId: string }) {
+export function PromoPlan({
+  promoId,
+  onBack,
+}: {
+  promoId: string;
+  onBack?: () => void;
+}) {
   const { snap } = useOps();
   const promo = snap.promos.find((p) => p.id === promoId);
   if (!promo) {
     return (
       <div className="space-y-3">
-        <Link href="/plan" className="text-[12px] font-semibold text-[#9bb0ff] hover:underline">
-          ← Plan
-        </Link>
+        {onBack ? (
+          <button type="button" onClick={onBack} className="text-[12px] font-semibold text-[#9bb0ff] hover:underline">
+            ← Plan
+          </button>
+        ) : (
+          <Link href="/planner" className="text-[12px] font-semibold text-[#9bb0ff] hover:underline">
+            ← Calendar
+          </Link>
+        )}
         <p className="text-[13px] text-slate-400">That promo is not on the sheet right now.</p>
       </div>
     );
@@ -40,19 +52,27 @@ export function PromoPlan({ promoId }: { promoId: string }) {
   return (
     <div className="space-y-5">
       <div>
-        <Link href="/plan" className="text-[12px] font-semibold text-[#9bb0ff] hover:underline">
-          ← Plan
-        </Link>
+        {onBack ? (
+          <button type="button" onClick={onBack} className="text-[12px] font-semibold text-[#9bb0ff] hover:underline">
+            ← Promos
+          </button>
+        ) : (
+          <Link href="/planner" className="text-[12px] font-semibold text-[#9bb0ff] hover:underline">
+            ← Calendar
+          </Link>
+        )}
         <p className="mt-3 text-[12px] font-semibold text-slate-400">{promo.showName || "Promo"}</p>
-        <h1 className="mt-1 text-2xl font-extrabold text-white">{promo.promoName || promo.showName || "—"}</h1>
+        <h1 className={`mt-1 font-extrabold text-white ${onBack ? "text-lg" : "text-2xl"}`}>
+          {promo.promoName || promo.showName || "—"}
+        </h1>
         <p className="mt-1 text-[12px] text-slate-400">
           First half is by 3:00pm IST. Second half is by 8:00pm. EOD is 8:00pm. Record saves the date and the time.
         </p>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
-        <table className="w-full min-w-[760px] text-left text-[12px]">
-          <thead className="bg-[#17171d] text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        <table className={`w-full text-left text-[12px] ${onBack ? "" : "min-w-[760px]"}`}>
+          <thead className={`bg-[#17171d] text-[10px] font-bold uppercase tracking-wider text-slate-500 ${onBack ? "hidden" : ""}`}>
             <tr>
               <th className="px-3 py-2"> </th>
               <th className="px-3 py-2">Assets</th>
@@ -69,6 +89,7 @@ export function PromoPlan({ promoId }: { promoId: string }) {
                 promo={promo}
                 partNo={0}
                 cells={snap.plannerCells}
+                embedded={!!onBack}
                 open={!promoClosed && !assetsClosed}
                 slots={[
                   { label: "Assets", match: "asset", enabled: true },
@@ -85,6 +106,7 @@ export function PromoPlan({ promoId }: { promoId: string }) {
                   promo={promo}
                   partNo={part.partNo}
                   cells={snap.plannerCells}
+                  embedded={!!onBack}
                   open={!promoClosed && part.stage !== "delivered"}
                   slots={[
                     { label: "Assets", match: "asset", enabled: false },
@@ -121,12 +143,14 @@ function PlanDates({
   partNo,
   cells,
   open,
+  embedded = false,
   slots,
 }: {
   promo: Promo;
   partNo: number;
   cells: PlannerCell[];
   open: boolean;
+  embedded?: boolean;
   slots: { label: string; match: string; enabled: boolean }[];
 }) {
   const { act } = useOps();
@@ -177,6 +201,67 @@ function PlanDates({
         setError("Those dates did not record. Try again.");
       });
   };
+
+  if (embedded) {
+    const shown = slots.filter((slot) => slot.enabled);
+    return (
+      <td colSpan={5} className="px-3 py-3">
+        <div className="space-y-3">
+          {shown.map((slot) => (
+            <div key={slot.label}>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{slot.label}</p>
+              {!open ? (
+                <p className="mt-1 font-semibold text-slate-200">
+                  {formatDmy(savedDates[slot.label]) || "—"}
+                  {times[slot.label] ? ` · ${slotLabel(times[slot.label] ?? "") ?? times[slot.label]}` : ""}
+                </p>
+              ) : (
+                <div className="mt-1 space-y-1.5">
+                  <input
+                    type="date"
+                    value={draft[slot.label] ?? ""}
+                    onChange={(e) => setDraft((d) => ({ ...d, [slot.label]: e.target.value }))}
+                    className="w-full rounded-md border border-white/[0.1] bg-[#0e0e13] px-2 py-1 text-[12px] text-white"
+                  />
+                  <div className="flex flex-wrap gap-1">
+                    {TIMES.map((time) => (
+                      <button
+                        key={time}
+                        type="button"
+                        disabled={!draft[slot.label]}
+                        onClick={() =>
+                          setTimes((current) => ({
+                            ...current,
+                            [slot.label]: current[slot.label] === time ? null : time,
+                          }))
+                        }
+                        className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                          times[slot.label] === time ? "bg-[#4361ee]/40 text-white" : "bg-white/[0.06] text-slate-400"
+                        } disabled:opacity-40`}
+                      >
+                        {slotLabel(time) ?? time}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+          {open && (
+            <button
+              type="button"
+              disabled={!dirty}
+              onClick={record}
+              className="rounded-md bg-[#4361ee] px-2.5 py-1 text-[11px] font-bold text-white disabled:opacity-40"
+            >
+              Record
+            </button>
+          )}
+          {error && <p className="text-[11px] text-rose-300">{error}</p>}
+        </div>
+      </td>
+    );
+  }
 
   return (
     <>

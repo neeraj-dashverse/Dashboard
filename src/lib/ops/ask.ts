@@ -139,17 +139,19 @@ function answerPerson(snap: OpsSnapshot, name: string): string[] {
     .map((review) => review.animation?.overallQuality)
     .filter((score): score is number => score != null);
   if (scores.length === 0) {
-    lines.push(`No animation rating is recorded for ${name}.`);
+    lines.push(`Master Productivity has no animation rating for ${name}.`);
   } else {
     const average = Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 10) / 10;
-    lines.push(`Animation rating is ${average}/5 across ${scores.length} review${scores.length === 1 ? "" : "s"}.`);
+    lines.push(
+      `Master Productivity rating is ${average}/5 across ${scores.length} review${scores.length === 1 ? "" : "s"}.`
+    );
   }
 
   const notes = feedbackLines(snap, reviews, "animation");
   const editorNotes = feedbackLines(snap, qualityForEditor(snap, name), "edit");
   const allNotes = [...notes, ...editorNotes];
   if (allNotes.length === 0) {
-    lines.push(`No written feedback is on the quality sheet for ${name}.`);
+    lines.push(`Master Productivity has no written feedback for ${name}.`);
   } else {
     lines.push("Feedback:");
     lines.push(...allNotes.slice(0, 6));
@@ -170,12 +172,12 @@ function productivityLines(snap: OpsSnapshot, name: string): string[] {
   );
   if (person.daysWorked > 0) {
     lines.push(
-      `Worked ${person.daysWorked} day${person.daysWorked === 1 ? "" : "s"} on the daily sheet${
+      `Animation productivity sheet: ${person.daysWorked} day${person.daysWorked === 1 ? "" : "s"}${
         person.minutesPerDay != null ? `, about ${person.minutesPerDay} min/day` : ""
       }.`
     );
   } else {
-    lines.push("The daily productivity sheet has no rows for this name.");
+    lines.push("The Animation productivity sheet has no daily rows for this name.");
   }
   if (person.avgDelay != null) {
     lines.push(`Average delay against the rough-cut plan is ${person.avgDelay} day${person.avgDelay === 1 ? "" : "s"}.`);
@@ -262,8 +264,49 @@ function answerPromo(snap: OpsSnapshot, promo: Promo): string[] {
   }
   const remain = open.reduce((sum, part) => sum + (part.durationSec || 0), 0);
   if (remain > 0) lines.push(`Open parts still add up to ${formatDuration(remain)} of duration.`);
+  lines.push(...sheetFacts(snap, promo));
   return lines;
 }
+
+function sheetFacts(snap: OpsSnapshot, promo: Promo): string[] {
+  const lines: string[] = [];
+  const tracker = [promo.trackerStatus, promo.priority, promo.cps ? `CPS ${promo.cps}` : ""]
+    .filter(Boolean)
+    .join(", ");
+  if (tracker) lines.push(`Master Tracker: ${tracker}.`);
+  if (promo.preProd?.status) lines.push(`Pre Production Tracker: ${promo.preProd.status}.`);
+  if (promo.assetTeam?.assetsStatus) lines.push(`Assets Master: ${promo.assetTeam.assetsStatus}.`);
+  const master = [promo.masterStage && `stage ${promo.masterStage}`, promo.canvasStatus && `canvas ${promo.canvasStatus}`, promo.paymentStatus && `payment ${promo.paymentStatus}`]
+    .filter(Boolean)
+    .join(", ");
+  if (master) lines.push(`Dashverse Master Sheet: ${master}.`);
+  const base = promo.id.split("#")[0];
+  const plans = snap.plannerCells
+    .filter((cell) => cell.promoId === promo.id || cell.promoId.split("#")[0] === base)
+    .filter((cell) => cell.date && cell.text)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 4);
+  if (plans.length) {
+    lines.push(
+      `Planner: ${plans
+        .map((cell) => `${cell.partNo === 0 ? "asset" : `part ${cell.partNo}`} ${cell.text} on ${formatDmy(cell.date)}`)
+        .join("; ")}.`
+    );
+  }
+  return lines;
+}
+
+const SHEET_GUIDE = [
+  "Master Tracker, on PFM_dashboard_Timeline: the promo list, status, priority, and CPS.",
+  "Production Tracker: each part, its stage, in-house or agency, artist, editor, and plotted date.",
+  "Pre Production Tracker: the asset plan, status, artist, and start date.",
+  "Promos - Assets Master Sheet: the asset team's own status. The calendar keeps a promo only when this is WIP.",
+  "Master Productivity: CPS rating and written feedback. This is separate from how many minutes someone worked.",
+  "Animation productivity, Master data: one row per artist per day, with minutes and a remark. That file is not shared yet, so those minutes are empty.",
+  "Dashverse Master Sheet: canvas, delivery files, script links, cost, and payment.",
+  "Planner tab: the revised date, and first half, second half, or EOD.",
+  "Remarks tab: every time a plan is recorded, kept as its own row.",
+];
 
 function answerSummary(snap: OpsSnapshot, question: string): AskReply {
   const groups = teamGroups(snap);
@@ -342,6 +385,13 @@ export function answerOps(snap: OpsSnapshot, question: string): AskReply {
   const promos = promosInQuestion(snap, asked).filter(
     (promo) => !people.some((name) => norm(name) === norm(promo.showName) || norm(name) === norm(promo.promoName))
   );
+  if (
+    people.length === 0 &&
+    promos.length === 0 &&
+    /\bsheet|spreadsheet|which tab|where .*(from|stored|saved)|what do you (read|use)|source\b/i.test(asked)
+  ) {
+    return { heading: "Sheets I use", lines: SHEET_GUIDE };
+  }
   if (people.length === 0 && promos.length === 0) return answerSummary(snap, asked);
 
   const lines = [

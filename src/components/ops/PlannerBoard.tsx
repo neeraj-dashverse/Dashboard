@@ -17,6 +17,8 @@ import {
   type PlannerTab,
 } from "@/lib/ops/selectors";
 import type { Stage } from "@/lib/ops/types";
+import { PlanBoard } from "./PlanBoard";
+import { PromoPlan } from "./PromoPlan";
 import { useOps } from "./OpsProvider";
 import { SyncStrip } from "./SyncStrip";
 
@@ -121,6 +123,8 @@ export function PlannerBoard() {
   const { snap } = useOps();
   const [tab, setTab] = useState<PlannerTab>("preprod");
   const [shift, setShift] = useState(0);
+  const [planOpen, setPlanOpen] = useState(false);
+  const [planId, setPlanId] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const pendingToday = useRef(false);
 
@@ -185,7 +189,8 @@ export function PlannerBoard() {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="flex items-start gap-2">
+    <div className="min-w-0 flex-1 space-y-4">
       <SyncStrip />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -315,6 +320,30 @@ export function PlannerBoard() {
           ? "WIP only. Current status runs from Start (Y) through today. Later days show planned dates only."
           : "Read-only from Production Tracker. Current status runs through today. Later days show planned dates only."}
       </p>
+    </div>
+      <aside className="sticky top-4 flex shrink-0 self-stretch">
+        {planOpen && (
+          <div className="mr-2 h-[calc(100vh-7rem)] w-[380px] overflow-y-auto rounded-xl border border-white/[0.12] bg-[#161a26] p-3">
+            {planId ? (
+              <PromoPlan promoId={planId} onBack={() => setPlanId(null)} />
+            ) : (
+              <PlanBoard compact onSelect={setPlanId} />
+            )}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => setPlanOpen((open) => !open)}
+          className={`flex min-h-[240px] w-10 items-center justify-center self-start rounded-xl border px-1 ${
+            planOpen ? "border-[#4361ee] bg-[#2a3148]" : "border-white/[0.12] bg-[#222738] hover:border-white/[0.24]"
+          }`}
+          aria-expanded={planOpen}
+        >
+          <span className="[writing-mode:vertical-rl] rotate-180 text-[12px] font-bold tracking-[0.14em] text-white">
+            {planOpen ? "Hide plan" : "Plan"}
+          </span>
+        </button>
+      </aside>
     </div>
   );
 }
