@@ -12,9 +12,15 @@ type TimeSlot = (typeof TIMES)[number];
 export function PromoPlan({
   promoId,
   onBack,
+  embedded = false,
+  mode = "plan",
+  lane,
 }: {
   promoId: string;
   onBack?: () => void;
+  embedded?: boolean;
+  mode?: "plan" | "update";
+  lane?: "asset" | "animation";
 }) {
   const { snap } = useOps();
   const promo = snap.promos.find((p) => p.id === promoId);
@@ -56,7 +62,7 @@ export function PromoPlan({
           <button type="button" onClick={onBack} className="text-[12px] font-semibold text-[#9bb0ff] hover:underline">
             ← Promos
           </button>
-        ) : (
+        ) : embedded ? null : (
           <Link href="/planner" className="text-[12px] font-semibold text-[#9bb0ff] hover:underline">
             ← Calendar
           </Link>
@@ -66,13 +72,15 @@ export function PromoPlan({
           {promo.promoName || promo.showName || "—"}
         </h1>
         <p className="mt-1 text-[12px] text-slate-400">
-          First half is by 3:00pm IST. Second half is by 8:00pm. EOD is 8:00pm. Record saves the date and the time.
+          {mode === "update"
+            ? "This is the check against the planned date. If it slipped, write the reason and the new date. 1st half is by 3:00pm IST, 2nd half by 8:00pm, EOD is 8:00pm."
+            : "Set the date and Record. A delay, the reason, and the new date go under Update."}
         </p>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
-        <table className={`w-full text-left text-[12px] ${onBack ? "" : "min-w-[760px]"}`}>
-          <thead className={`bg-[#17171d] text-[10px] font-bold uppercase tracking-wider text-slate-500 ${onBack ? "hidden" : ""}`}>
+        <table className={`w-full text-left text-[12px] ${embedded || onBack ? "" : "min-w-[760px]"}`}>
+          <thead className={`bg-[#17171d] text-[10px] font-bold uppercase tracking-wider text-slate-500 ${embedded || onBack ? "hidden" : ""}`}>
             <tr>
               <th className="px-3 py-2"> </th>
               <th className="px-3 py-2">Assets</th>
@@ -83,40 +91,49 @@ export function PromoPlan({
             </tr>
           </thead>
           <tbody>
-            <tr className="border-t border-white/[0.06]">
-              <td className="px-3 py-3 font-semibold text-white">Asset</td>
-              <PlanDates
-                promo={promo}
-                partNo={0}
-                cells={snap.plannerCells}
-                embedded={!!onBack}
-                open={!promoClosed && !assetsClosed}
-                slots={[
-                  { label: "Assets", match: "asset", enabled: true },
-                  { label: "Rough cut", match: "rough cut|first cut|first animation|first edit", enabled: false },
-                  { label: "Final cut", match: "final cut|second cut|correction close", enabled: false },
-                  { label: "Sound", match: "sound", enabled: false },
-                ]}
-              />
-            </tr>
-            {parts.map((part) => (
-              <tr key={part.id} className="border-t border-white/[0.06]">
-                <td className="px-3 py-3 font-semibold text-white">Part {part.partNo}</td>
+            {lane !== "animation" && (
+              <tr className="border-t border-white/[0.06]">
+                <td className="px-3 py-3 font-semibold text-white">Asset</td>
                 <PlanDates
                   promo={promo}
-                  partNo={part.partNo}
+                  partNo={0}
                   cells={snap.plannerCells}
-                  embedded={!!onBack}
-                  open={!promoClosed && part.stage !== "delivered"}
+                  embedded={embedded || !!onBack}
+                  showTimes={mode === "update"}
+                  askDelay={mode === "update"}
+                  plannedHint={promo.preProd?.plannedDate}
+                  open={!promoClosed && !assetsClosed}
                   slots={[
-                    { label: "Assets", match: "asset", enabled: false },
-                    { label: "Rough cut", match: "rough cut|first cut|first animation|first edit", enabled: true },
-                    { label: "Final cut", match: "final cut|second cut|correction close", enabled: true },
-                    { label: "Sound", match: "sound", enabled: true },
+                    { label: "Assets", match: "asset", enabled: true },
+                    { label: "Rough cut", match: "rough cut|first cut|first animation|first edit", enabled: false },
+                    { label: "Final cut", match: "final cut|second cut|correction close", enabled: false },
+                    { label: "Sound", match: "sound", enabled: false },
                   ]}
                 />
               </tr>
-            ))}
+            )}
+            {lane !== "asset" &&
+              parts.map((part) => (
+                <tr key={part.id} className="border-t border-white/[0.06]">
+                  <td className="px-3 py-3 font-semibold text-white">Part {part.partNo}</td>
+                  <PlanDates
+                    promo={promo}
+                    partNo={part.partNo}
+                    cells={snap.plannerCells}
+                    embedded={embedded || !!onBack}
+                    showTimes={mode === "update"}
+                    askDelay={mode === "update"}
+                    plannedHint={part.plannedPlottedDate || part.deadline || part.plannedDate}
+                    open={!promoClosed && part.stage !== "delivered"}
+                    slots={[
+                      { label: "Assets", match: "asset", enabled: false },
+                      { label: "Rough cut", match: "rough cut|first cut|first animation|first edit", enabled: true },
+                      { label: "Final cut", match: "final cut|second cut|correction close", enabled: true },
+                      { label: "Sound", match: "sound", enabled: true },
+                    ]}
+                  />
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>
@@ -144,6 +161,9 @@ function PlanDates({
   cells,
   open,
   embedded = false,
+  showTimes = true,
+  askDelay = false,
+  plannedHint = null,
   slots,
 }: {
   promo: Promo;
@@ -151,6 +171,9 @@ function PlanDates({
   cells: PlannerCell[];
   open: boolean;
   embedded?: boolean;
+  showTimes?: boolean;
+  askDelay?: boolean;
+  plannedHint?: string | null;
   slots: { label: string; match: string; enabled: boolean }[];
 }) {
   const { act } = useOps();
@@ -166,12 +189,14 @@ function PlanDates({
   const [times, setTimes] = useState<Record<string, TimeSlot | null>>(
     Object.fromEntries(slots.map((s) => [s.label, fromSheet[s.label]?.time ?? null]))
   );
-  const dirty = slots.some(
-    (s) =>
-      s.enabled &&
-      ((draft[s.label] ?? "") !== (savedDates[s.label] ?? "") ||
-        (times[s.label] ?? null) !== (fromSheet[s.label]?.time ?? null))
-  );
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const dirty = slots.some((s) => {
+    if (!s.enabled) return false;
+    const dateChanged = (draft[s.label] ?? "") !== (savedDates[s.label] ?? "");
+    const timeChanged = showTimes && (times[s.label] ?? null) !== (fromSheet[s.label]?.time ?? null);
+    const reasonChanged = askDelay && (reasons[s.label] ?? "").trim().length > 0;
+    return dateChanged || timeChanged || reasonChanged;
+  });
 
   const record = () => {
     const mine = ++gen.current;
@@ -186,15 +211,28 @@ function PlanDates({
       promoName: promo.promoName,
       slots: slots
         .filter((s) => s.enabled)
-        .map((s) => ({
-          label: times[s.label] ? `${s.label} · ${times[s.label]}` : s.label,
-          match: s.match,
-          date: nextDraft[s.label] ?? "",
-        })),
+        .map((s) => {
+          const time = showTimes ? times[s.label] : fromSheet[s.label]?.time;
+          const planned = fromSheet[s.label]?.date || plannedHint || "";
+          const next = nextDraft[s.label] ?? "";
+          const reason = (reasons[s.label] ?? "").trim();
+          const moved = planned && next && next !== planned ? `Planned ${planned} → ${next}` : "";
+          const note = [moved, reason].filter(Boolean).join(". ");
+          return {
+            label: time ? `${s.label} · ${time}` : s.label,
+            match: s.match,
+            date: next,
+            note,
+          };
+        }),
     };
     flight.current = flight.current
       .catch(() => undefined)
       .then(() => act(payload, { quiet: true }))
+      .then(() => {
+        if (gen.current !== mine) return;
+        setReasons({});
+      })
       .catch(() => {
         if (gen.current !== mine) return;
         setLocalSaved(null);
@@ -217,32 +255,50 @@ function PlanDates({
                 </p>
               ) : (
                 <div className="mt-1 space-y-1.5">
+                  {askDelay && (
+                    <p className="text-[11px] text-slate-300">
+                      Planned {formatDmy(fromSheet[slot.label]?.date || plannedHint) || "—"}
+                    </p>
+                  )}
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                    {askDelay ? "Update date" : "Date"}
+                  </p>
                   <input
                     type="date"
                     value={draft[slot.label] ?? ""}
                     onChange={(e) => setDraft((d) => ({ ...d, [slot.label]: e.target.value }))}
                     className="w-full rounded-md border border-white/[0.1] bg-[#0e0e13] px-2 py-1 text-[12px] text-white"
                   />
-                  <div className="flex flex-wrap gap-1">
-                    {TIMES.map((time) => (
-                      <button
-                        key={time}
-                        type="button"
-                        disabled={!draft[slot.label]}
-                        onClick={() =>
-                          setTimes((current) => ({
-                            ...current,
-                            [slot.label]: current[slot.label] === time ? null : time,
-                          }))
-                        }
-                        className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
-                          times[slot.label] === time ? "bg-[#4361ee]/40 text-white" : "bg-white/[0.06] text-slate-400"
-                        } disabled:opacity-40`}
-                      >
-                        {slotLabel(time) ?? time}
-                      </button>
-                    ))}
-                  </div>
+                  {askDelay && (
+                    <input
+                      value={reasons[slot.label] ?? ""}
+                      onChange={(e) => setReasons((current) => ({ ...current, [slot.label]: e.target.value }))}
+                      placeholder="Delay reason"
+                      className="w-full rounded-md border border-white/[0.1] bg-[#0e0e13] px-2 py-1 text-[12px] text-white placeholder:text-slate-500"
+                    />
+                  )}
+                  {showTimes && (
+                    <div className="flex flex-wrap gap-1">
+                      {TIMES.map((time) => (
+                        <button
+                          key={time}
+                          type="button"
+                          disabled={!draft[slot.label]}
+                          onClick={() =>
+                            setTimes((current) => ({
+                              ...current,
+                              [slot.label]: current[slot.label] === time ? null : time,
+                            }))
+                          }
+                          className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                            times[slot.label] === time ? "bg-[#4361ee]/40 text-white" : "bg-white/[0.06] text-slate-400"
+                          } disabled:opacity-40`}
+                        >
+                          {slotLabel(time) ?? time}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -275,34 +331,52 @@ function PlanDates({
             </span>
           ) : (
             <div className="space-y-1.5">
+              {askDelay && (
+                <p className="text-[11px] text-slate-300">
+                  Planned {formatDmy(fromSheet[slot.label]?.date || plannedHint) || "—"}
+                </p>
+              )}
+              {askDelay && (
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Update date</p>
+              )}
               <input
                 type="date"
                 value={draft[slot.label] ?? ""}
                 onChange={(e) => setDraft((d) => ({ ...d, [slot.label]: e.target.value }))}
                 className="rounded-md border border-white/[0.1] bg-[#0e0e13] px-2 py-1 text-[12px] text-white"
               />
-              <div className="flex flex-wrap gap-1">
-                {TIMES.map((time) => (
-                  <button
-                    key={time}
-                    type="button"
-                    disabled={!draft[slot.label]}
-                    onClick={() =>
-                      setTimes((current) => ({
-                        ...current,
-                        [slot.label]: current[slot.label] === time ? null : time,
-                      }))
-                    }
-                    className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
-                      times[slot.label] === time
-                        ? "bg-[#4361ee]/40 text-white"
-                        : "bg-white/[0.06] text-slate-400"
-                    } disabled:opacity-40`}
-                  >
-                    {slotLabel(time) ?? time}
-                  </button>
-                ))}
-              </div>
+              {askDelay && (
+                <input
+                  value={reasons[slot.label] ?? ""}
+                  onChange={(e) => setReasons((current) => ({ ...current, [slot.label]: e.target.value }))}
+                  placeholder="Delay reason"
+                  className="w-full rounded-md border border-white/[0.1] bg-[#0e0e13] px-2 py-1 text-[12px] text-white placeholder:text-slate-500"
+                />
+              )}
+              {showTimes && (
+                <div className="flex flex-wrap gap-1">
+                  {TIMES.map((time) => (
+                    <button
+                      key={time}
+                      type="button"
+                      disabled={!draft[slot.label]}
+                      onClick={() =>
+                        setTimes((current) => ({
+                          ...current,
+                          [slot.label]: current[slot.label] === time ? null : time,
+                        }))
+                      }
+                      className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                        times[slot.label] === time
+                          ? "bg-[#4361ee]/40 text-white"
+                          : "bg-white/[0.06] text-slate-400"
+                      } disabled:opacity-40`}
+                    >
+                      {slotLabel(time) ?? time}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </td>

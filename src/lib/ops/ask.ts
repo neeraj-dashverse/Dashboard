@@ -11,9 +11,17 @@ import {
   teamGroups,
 } from "./selectors";
 
+export type AskChoice = {
+  kind: "person" | "promo";
+  id: string;
+  label: string;
+};
+
 export type AskReply = {
   heading: string;
   lines: string[];
+  /** More than one sheet row fits the question. The person picks one. */
+  choices?: AskChoice[];
 };
 
 function norm(value: string): string {
@@ -106,6 +114,63 @@ function promosInQuestion(snap: OpsSnapshot, question: string): Promo[] {
   return produced.length ? produced : unique.slice(0, 1);
 }
 
+function formatPartList(parts: number[]): string {
+  const nums = [...new Set(parts)].sort((a, b) => a - b);
+  const runs: string[] = [];
+  let start = nums[0];
+  let prev = nums[0];
+  for (const num of nums.slice(1)) {
+    if (num === prev + 1) {
+      prev = num;
+      continue;
+    }
+    runs.push(start === prev ? String(start) : `${start}–${prev}`);
+    start = prev = num;
+  }
+  if (start != null) runs.push(start === prev ? String(start) : `${start}–${prev}`);
+  return runs.join(", ");
+}
+
+function editDistance(a: string, b: string): number {
+  const rows = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i++) rows[i][0] = i;
+  for (let j = 0; j <= b.length; j++) rows[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      rows[i][j] =
+        a[i - 1] === b[j - 1]
+          ? rows[i - 1][j - 1]
+          : 1 + Math.min(rows[i - 1][j], rows[i][j - 1], rows[i - 1][j - 1]);
+    }
+  }
+  return rows[a.length][b.length];
+}
+
+function tokenNear(word: string, token: string): boolean {
+  if (word === token) return true;
+  if (word.length < 4 || token.length < 4) return false;
+  const limit = Math.max(word.length, token.length) >= 8 ? 2 : 1;
+  return editDistance(word, token) <= limit;
+}
+
+/** 100 when the name is written out. Lower when only some words, or a spelling, match. */
+function nameScore(question: string, name: string): number {
+  const label = norm(name);
+  if (label.length < 3) return 0;
+  const asked = norm(question);
+  if (asked.includes(label)) return 100;
+  const words = asked.split(" ").filter((word) => word.length >= 3);
+  const tokens = label.split(" ").filter((token) => token.length >= 3);
+  if (!words.length || !tokens.length) return 0;
+  let weight = 0;
+  let matched = 0;
+  for (const token of tokens) {
+    weight += token.length;
+    if (words.some((word) => word === token || tokenNear(word, token))) matched += token.length;
+  }
+  return weight ? Math.min(92, Math.round((matched / weight) * 100)) : 0;
+}
+
 function plotDate(part: Part): string | null {
   return part.plannedPlottedDate ?? part.deadline ?? part.plannedDate;
 }
@@ -123,13 +188,22 @@ function answerPerson(snap: OpsSnapshot, name: string): string[] {
   } else {
     for (const place of open) {
       lines.push(`${name} is in ${place.group}.`);
+      const buckets = new Map<string, { until: string | null; doing: string; parts: number[] }>();
       for (const hold of place.person.holds) {
-        const when = hold.until ? `Plotted ${formatDmy(hold.until)}` : "The sheet has no plotted date";
+        const partNo = Number(hold.title.match(/P(\d+)$/)?.[1]);
+        const key = `${hold.until ?? ""}|${hold.doing}`;
+        const bucket = buckets.get(key) ?? { until: hold.until, doing: hold.doing, parts: [] };
+        if (!Number.isNaN(partNo)) bucket.parts.push(partNo);
+        buckets.set(key, bucket);
+      }
+      for (const bucket of buckets.values()) {
+        const when = bucket.until ? formatDmy(bucket.until) : "no plotted date";
+        const same = bucket.parts.length > 1 ? `Parts ${formatPartList(bucket.parts)} share ${when}` : `Part ${bucket.parts[0] ?? "—"} is on ${when}`;
         const late =
-          hold.until && hold.until < snap.today
-            ? ` That date has passed by ${daysLate(hold.until, snap.today)} day${daysLate(hold.until, snap.today) === 1 ? "" : "s"}, and the part is still open.`
+          bucket.until && bucket.until < snap.today
+            ? ` That day is ${daysLate(bucket.until, snap.today)} day${daysLate(bucket.until, snap.today) === 1 ? "" : "s"} past, and the work is still open.`
             : "";
-        lines.push(`${hold.title}. ${hold.doing}. ${when}.${late}`);
+        lines.push(`${same}. ${bucket.doing}.${late}`);
       }
     }
   }
@@ -234,15 +308,22 @@ function answerPromo(snap: OpsSnapshot, promo: Promo): string[] {
   const lines = [
     `${title} has ${open.length} open part${open.length === 1 ? "" : "s"} out of ${parts.length}. Still in ${stages.join(", ")}.`,
   ];
+  const buckets = new Map<string, { stage: string; team: string; who: string; date: string; parts: number[] }>();
   for (const part of open) {
+    const date = plotDate(part) ?? "";
     const team = part.team === "agency" ? "Agency" : "In house";
     const who = part.artist?.trim() || "No artist";
-    const editor = part.editors?.trim();
-    const plot = plotDate(part);
-    const when = plot ? `plotted ${formatDmy(plot)}` : "no plotted date";
-    lines.push(
-      `Part ${part.partNo}: ${STAGE_LABEL[part.stage] ?? part.stage}${part.status ? ` ${part.status}` : ""}. ${team}, ${who}${editor ? `, editor ${editor}` : ""}, ${when}.`
-    );
+    const stage = STAGE_LABEL[part.stage] ?? part.stage;
+    const key = `${stage}|${team}|${who}|${date}`;
+    const bucket = buckets.get(key) ?? { stage, team, who, date, parts: [] };
+    bucket.parts.push(part.partNo);
+    buckets.set(key, bucket);
+  }
+  for (const bucket of buckets.values()) {
+    const partsLabel = bucket.parts.length > 1 ? `Parts ${formatPartList(bucket.parts)}` : `Part ${bucket.parts[0]}`;
+    const when = bucket.date ? formatDmy(bucket.date) : "no plotted date";
+    const shared = bucket.parts.length > 1 ? " are all on " : " is on ";
+    lines.push(`${partsLabel} (${bucket.stage}, ${bucket.team}, ${bucket.who})${shared}${when}.`);
   }
 
   const dates = open.map(plotDate).filter((date): date is string => !!date).sort();
@@ -375,29 +456,67 @@ function answerSummary(snap: OpsSnapshot, question: string): AskReply {
   };
 }
 
+function rankedChoices(snap: OpsSnapshot, question: string): { score: number; choice: AskChoice }[] {
+  const found: { score: number; choice: AskChoice }[] = [];
+  for (const name of uniqueNames(snap)) {
+    const score = nameScore(question, name);
+    if (score >= 55) found.push({ score, choice: { kind: "person", id: name, label: name } });
+  }
+  const seen = new Set<string>();
+  for (const promo of snap.promos) {
+    const base = promo.id.split("#")[0];
+    if (seen.has(base)) continue;
+    seen.add(base);
+    const score = Math.max(
+      nameScore(question, promo.showName),
+      nameScore(question, promo.promoName),
+      nameScore(question, `${promo.showName} ${promo.promoName}`)
+    );
+    if (score < 55) continue;
+    const label = promo.promoName ? `${promo.showName} · ${promo.promoName}` : promo.showName;
+    found.push({ score, choice: { kind: "promo", id: promo.id, label } });
+  }
+  return found.sort((a, b) => b.score - a.score || a.choice.label.localeCompare(b.choice.label));
+}
+
 /** Answer from the sheets already loaded in the dashboard. */
-export function answerOps(snap: OpsSnapshot, question: string): AskReply {
+export function answerOps(
+  snap: OpsSnapshot,
+  question: string,
+  pick?: AskChoice
+): AskReply {
   const asked = question.trim();
-  if (!asked) {
+  if (!asked && !pick) {
     return { heading: "Ask about the sheets", lines: ["Name an artist or a show."] };
   }
-  const people = peopleInQuestion(snap, asked);
-  const promos = promosInQuestion(snap, asked).filter(
-    (promo) => !people.some((name) => norm(name) === norm(promo.showName) || norm(name) === norm(promo.promoName))
-  );
-  if (
-    people.length === 0 &&
-    promos.length === 0 &&
-    /\bsheet|spreadsheet|which tab|where .*(from|stored|saved)|what do you (read|use)|source\b/i.test(asked)
-  ) {
-    return { heading: "Sheets I use", lines: SHEET_GUIDE };
+  if (pick?.kind === "person") {
+    return { heading: pick.label, lines: answerPerson(snap, pick.id) };
   }
-  if (people.length === 0 && promos.length === 0) return answerSummary(snap, asked);
-
-  const lines = [
-    ...people.flatMap((name) => answerPerson(snap, name)),
-    ...promos.flatMap((promo) => answerPromo(snap, promo)),
-  ];
-  const heading = people[0] ?? (promos[0] ? promos[0].showName : "Sheets");
-  return { heading, lines };
+  if (pick?.kind === "promo") {
+    const promo = snap.promos.find((item) => item.id === pick.id);
+    if (!promo) return { heading: pick.label, lines: ["That promo is not on the sheets."] };
+    return { heading: promo.showName || pick.label, lines: answerPromo(snap, promo) };
+  }
+  const ranked = rankedChoices(snap, asked);
+  const best = ranked[0];
+  if (!best) {
+    if (/\bsheet|spreadsheet|which tab|where .*(from|stored|saved)|what do you (read|use)|source\b/i.test(asked)) {
+      return { heading: "Sheets I use", lines: SHEET_GUIDE };
+    }
+    return answerSummary(snap, asked);
+  }
+  const close = ranked.filter((item) => item.score >= best.score - 12);
+  const exact = close.filter((item) => item.score >= 100);
+  if (exact.length === 1) {
+    return answerOps(snap, asked, exact[0].choice);
+  }
+  return {
+    heading: "Which one?",
+    lines: [
+      exact.length > 1
+        ? "More than one promo or person matches. Select the one you mean."
+        : `Nothing matches that spelling exactly. Select the closest: ${close[0]?.choice.label ?? ""}.`,
+    ],
+    choices: (exact.length > 1 ? exact : close).slice(0, 6).map((item) => item.choice),
+  };
 }

@@ -322,7 +322,7 @@ export type OpsAction =
       partNo: number;
       showName?: string;
       promoName?: string;
-      slots: { label: string; date: string; match: string }[];
+      slots: { label: string; date: string; match: string; note?: string }[];
     }
   /** Append one remark. Stored as its own row on the Remarks tab. */
   | {

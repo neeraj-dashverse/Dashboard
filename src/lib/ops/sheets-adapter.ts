@@ -340,7 +340,10 @@ export const sheetsAdapter: OpsAdapter = {
         });
         const body = action.slots
           .filter((slot) => slot.date.trim())
-          .map((slot) => `${slot.label} ${slot.date}`)
+          .map((slot) => {
+            const line = `${slot.label} ${slot.date}`;
+            return slot.note?.trim() ? `${line}. Delay: ${slot.note.trim()}` : line;
+          })
           .join("; ");
         if (body) {
           try {

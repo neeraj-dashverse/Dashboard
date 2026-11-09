@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { answerOps, type AskReply } from "@/lib/ops/ask";
+import { answerOps, type AskChoice, type AskReply } from "@/lib/ops/ask";
 import { plannerRows, teamGroups } from "@/lib/ops/selectors";
 import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
@@ -29,12 +29,25 @@ export function AskBoard() {
     return prompts;
   }, [snap]);
 
-  function ask(text: string) {
+  async function ask(text: string, pick?: AskChoice) {
     const next = text.trim();
     if (!next) return;
     setQuestion(next);
     setAsked(next);
-    setReply(answerOps(snap, next));
+    const local = answerOps(snap, next, pick);
+    setReply(local);
+    if (local.choices?.length) return;
+    try {
+      const res = await fetch("/api/ops/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: next, facts: local.lines.join("\n") }),
+      });
+      const data = (await res.json()) as { summary?: string | null };
+      if (data.summary) setReply({ ...local, lines: data.summary.split(/\n+/).filter(Boolean) });
+    } catch {
+      /* The sheet summary already on screen is the answer. */
+    }
   }
 
   return (
@@ -43,8 +56,8 @@ export function AskBoard() {
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Ask AI</p>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Ask the sheets</h1>
         <p className="mt-1 text-[12px] leading-5 text-slate-400">
-          Ask where an artist is plotted, their rating, feedback, and productivity, or when a promo is plotted to close.
-          Answers use the production, team, quality, and daily productivity sheets.
+          A misspelled show or artist asks you to pick the right row, then summarizes it. Parts that share a date are
+          counted once. Add GEMINI_API_KEY to write that summary in Gemini. The facts still come from the sheets.
         </p>
       </div>
       <SyncStrip />
@@ -100,6 +113,20 @@ export function AskBoard() {
               </p>
             ))}
           </div>
+          {reply.choices && reply.choices.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {reply.choices.map((choice) => (
+                <button
+                  key={`${choice.kind}-${choice.id}`}
+                  type="button"
+                  onClick={() => void ask(asked, choice)}
+                  className="rounded-full border border-[#4361ee]/40 bg-[#4361ee]/15 px-3 py-1.5 text-left text-[12px] font-semibold text-[#d5deff] hover:bg-[#4361ee]/25"
+                >
+                  {choice.label}
+                </button>
+              ))}
+            </div>
+          )}
         </section>
       )}
     </div>

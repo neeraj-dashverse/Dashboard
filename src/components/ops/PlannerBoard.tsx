@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import {
   artistName,
+  assetStartDate,
   calendarDelay,
   dayLanes,
   formatDmy,
@@ -17,7 +18,6 @@ import {
   type PlannerTab,
 } from "@/lib/ops/selectors";
 import type { Stage } from "@/lib/ops/types";
-import { PlanBoard } from "./PlanBoard";
 import { PromoPlan } from "./PromoPlan";
 import { useOps } from "./OpsProvider";
 import { SyncStrip } from "./SyncStrip";
@@ -123,8 +123,9 @@ export function PlannerBoard() {
   const { snap } = useOps();
   const [tab, setTab] = useState<PlannerTab>("preprod");
   const [shift, setShift] = useState(0);
-  const [planOpen, setPlanOpen] = useState(false);
-  const [planId, setPlanId] = useState<string | null>(null);
+  const [sheetMode, setSheetMode] = useState<"plan" | "update" | null>(null);
+  const [lane, setLane] = useState<"asset" | "animation">("asset");
+  const [promoId, setPromoId] = useState("");
   const scrollerRef = useRef<HTMLDivElement>(null);
   const pendingToday = useRef(false);
 
@@ -158,6 +159,21 @@ export function PlannerBoard() {
   }, [days, tab]);
 
   const promoCount = new Set(rows.map((r) => r.promo.id)).size;
+  const sheetPromos = useMemo(() => {
+    const map = new Map<string, (typeof rows)[number]["promo"]>();
+    const source = lane === "asset" ? plannerPreprodRows(snap) : plannerRows(snap);
+    for (const row of source) map.set(row.promo.id, row.promo);
+    return [...map.values()].sort((a, b) => {
+      const startA = assetStartDate(a, snap.today) ?? "";
+      const startB = assetStartDate(b, snap.today) ?? "";
+      if (startA !== startB) return startB.localeCompare(startA);
+      return (a.showName || "").localeCompare(b.showName || "");
+    });
+  }, [snap, lane]);
+
+  useEffect(() => {
+    if (promoId && !sheetPromos.some((promo) => promo.id === promoId)) setPromoId("");
+  }, [sheetPromos, promoId]);
 
   const fmtDay = (iso: string) => {
     return { label: formatDmy(iso), wd: WEEKDAYS[dow(iso)] };
@@ -188,9 +204,12 @@ export function PlannerBoard() {
     </div>
   );
 
+  const openSheet = (next: "plan" | "update") => {
+    setSheetMode((current) => (current === next ? null : next));
+  };
+
   return (
-    <div className="flex items-start gap-2">
-    <div className="min-w-0 flex-1 space-y-4">
+    <div className="space-y-4">
       <SyncStrip />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -228,8 +247,63 @@ export function PlannerBoard() {
           >
             →
           </button>
+          <span className="mx-1 h-5 w-px bg-white/15" />
+          {(["plan", "update"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => openSheet(mode)}
+              className={`rounded-md px-3 py-1.5 text-[12px] font-bold ${
+                sheetMode === mode ? "bg-[#4361ee] text-white" : "bg-white/[0.05] text-slate-300 hover:text-white"
+              }`}
+            >
+              {mode === "plan" ? "Plan" : "Update"}
+            </button>
+          ))}
         </div>
       </div>
+
+      {sheetMode && (
+        <section className="space-y-3 rounded-xl border border-white/[0.12] bg-[#161a26] p-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="space-y-1 text-[11px] font-semibold text-slate-400">
+              <span className="block">Which work</span>
+              <select
+                value={lane}
+                onChange={(event) => setLane(event.target.value as "asset" | "animation")}
+                className="rounded-md border border-white/[0.12] bg-[#222738] px-2 py-1.5 text-[13px] text-white"
+              >
+                <option value="asset">Asset</option>
+                <option value="animation">Animation</option>
+              </select>
+            </label>
+            <label className="min-w-[220px] flex-1 space-y-1 text-[11px] font-semibold text-slate-400">
+              <span className="block">Promo</span>
+              <select
+                value={promoId}
+                onChange={(event) => setPromoId(event.target.value)}
+                className="w-full rounded-md border border-white/[0.12] bg-[#222738] px-2 py-1.5 text-[13px] text-white"
+              >
+                <option value="">Choose a promo</option>
+                {sheetPromos.map((promo) => (
+                  <option key={promo.id} value={promo.id}>
+                    {(promo.promoName || promo.showName || "—") + (promo.promoName ? ` · ${promo.showName}` : "")}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {promoId ? (
+            <PromoPlan promoId={promoId} embedded mode={sheetMode} lane={lane} />
+          ) : (
+            <p className="text-[12px] text-slate-400">
+              {sheetPromos.length === 0
+                ? `No open ${lane === "asset" ? "asset" : "animation"} promos.`
+                : "Pick a promo to fill this in."}
+            </p>
+          )}
+        </section>
+      )}
 
       <div className="flex gap-1 rounded-xl border border-white/[0.08] bg-[#222738] p-1">
         {(
@@ -320,30 +394,6 @@ export function PlannerBoard() {
           ? "WIP only. Current status runs from Start (Y) through today. Later days show planned dates only."
           : "Read-only from Production Tracker. Current status runs through today. Later days show planned dates only."}
       </p>
-    </div>
-      <aside className="sticky top-4 flex shrink-0 self-stretch">
-        {planOpen && (
-          <div className="mr-2 h-[calc(100vh-7rem)] w-[380px] overflow-y-auto rounded-xl border border-white/[0.12] bg-[#161a26] p-3">
-            {planId ? (
-              <PromoPlan promoId={planId} onBack={() => setPlanId(null)} />
-            ) : (
-              <PlanBoard compact onSelect={setPlanId} />
-            )}
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={() => setPlanOpen((open) => !open)}
-          className={`flex min-h-[240px] w-10 items-center justify-center self-start rounded-xl border px-1 ${
-            planOpen ? "border-[#4361ee] bg-[#2a3148]" : "border-white/[0.12] bg-[#222738] hover:border-white/[0.24]"
-          }`}
-          aria-expanded={planOpen}
-        >
-          <span className="[writing-mode:vertical-rl] rotate-180 text-[12px] font-bold tracking-[0.14em] text-white">
-            {planOpen ? "Hide plan" : "Plan"}
-          </span>
-        </button>
-      </aside>
     </div>
   );
 }
