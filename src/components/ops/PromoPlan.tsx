@@ -23,6 +23,8 @@ export function PromoPlan({
   lane?: "asset" | "animation";
 }) {
   const { snap } = useOps();
+  const [updatePart, setUpdatePart] = useState<number | null>(null);
+  const [updateStage, setUpdateStage] = useState("Rough cut");
   const promo = snap.promos.find((p) => p.id === promoId);
   if (!promo) {
     return (
@@ -54,6 +56,56 @@ export function PromoPlan({
   const status = (asset?.assetsStatus ?? "").toLowerCase();
   const assetsClosed =
     Boolean(assetClosedDate(promo)) || (status.includes("approved") && !status.includes("send"));
+  const chosenPart = parts.find((part) => part.partNo === updatePart) ?? parts[0];
+
+  if (embedded && mode === "update" && lane === "animation") {
+    const stageSlots = [
+      { label: "Rough cut", match: "rough cut|first cut|first animation|first edit" },
+      { label: "Final cut", match: "final cut|second cut|correction close" },
+      { label: "Sound", match: "sound" },
+    ];
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        <select
+          value={chosenPart?.partNo ?? ""}
+          onChange={(event) => setUpdatePart(Number(event.target.value))}
+          aria-label="Part"
+          className="h-7 rounded border border-white/[0.1] bg-[#0e0e13] px-1.5 text-[12px] text-white"
+        >
+          {parts.map((part) => (
+            <option key={part.partNo} value={part.partNo}>
+              P{part.partNo}
+            </option>
+          ))}
+        </select>
+        <select
+          value={updateStage}
+          onChange={(event) => setUpdateStage(event.target.value)}
+          aria-label="Stage"
+          className="h-7 rounded border border-white/[0.1] bg-[#0e0e13] px-1.5 text-[12px] text-white"
+        >
+          {stageSlots.map((slot) => (
+            <option key={slot.label}>{slot.label}</option>
+          ))}
+        </select>
+        {chosenPart ? (
+          <PlanDates
+            promo={promo}
+            partNo={chosenPart.partNo}
+            cells={snap.plannerCells}
+            embedded
+            showTimes
+            askDelay
+            plannedHint={chosenPart.plannedPlottedDate || chosenPart.deadline || chosenPart.plannedDate}
+            open={!promoClosed && chosenPart.stage !== "delivered"}
+            slots={stageSlots.map((slot) => ({ ...slot, enabled: slot.label === updateStage }))}
+          />
+        ) : (
+          <p className="text-[12px] text-slate-400">No open animation parts.</p>
+        )}
+      </div>
+    );
+  }
 
   if (embedded) {
     return (
@@ -299,14 +351,17 @@ function PlanDates({
   if (embedded) {
     const shown = slots.filter((slot) => slot.enabled);
     const field = "h-7 rounded border border-white/[0.1] bg-[#0e0e13] px-1.5 text-[12px] text-white";
+    const shell = rowLabel
+      ? "flex flex-wrap items-center gap-1.5 px-2 py-1"
+      : "contents";
     return (
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1">
-        <span className="w-10 shrink-0 text-[12px] font-semibold text-white">{rowLabel}</span>
+      <div className={shell}>
+        {rowLabel && <span className="w-10 shrink-0 text-[12px] font-semibold text-white">{rowLabel}</span>}
         {shown.map((slot) => {
           const planned = formatDmy(fromSheet[slot.label]?.date || plannedHint);
           return (
             <div key={slot.label} className="flex items-center gap-1.5">
-              <span className="text-[11px] text-slate-400">{slot.label}</span>
+              {shown.length > 1 && <span className="text-[11px] text-slate-400">{slot.label}</span>}
               {!open ? (
                 <span className="text-[12px] text-slate-200">
                   {formatDmy(savedDates[slot.label]) || "—"}
@@ -314,7 +369,11 @@ function PlanDates({
                 </span>
               ) : (
                 <>
-                  {askDelay && <span className="text-[11px] text-slate-500">{planned}</span>}
+                  {askDelay && (
+                    <span className="text-[11px] text-slate-500" title="Planned and plotted date on the Production Tracker">
+                      Plot {planned}
+                    </span>
+                  )}
                   <input
                     type="date"
                     aria-label={askDelay ? `${slot.label} update date` : `${slot.label} date`}
