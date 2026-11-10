@@ -264,7 +264,7 @@ export function PlannerBoard() {
       </div>
 
       {sheetMode && (
-        <section className="space-y-3 rounded-xl border border-white/[0.12] bg-[#161a26] p-4">
+        <section className="space-y-2 rounded-xl border border-white/[0.12] bg-[#161a26] px-3 py-2">
           <div className="flex flex-wrap items-end gap-3">
             <label className="space-y-1 text-[11px] font-semibold text-slate-400">
               <span className="block">Which work</span>

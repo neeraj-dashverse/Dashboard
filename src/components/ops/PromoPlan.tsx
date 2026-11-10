@@ -55,6 +55,60 @@ export function PromoPlan({
   const assetsClosed =
     Boolean(assetClosedDate(promo)) || (status.includes("approved") && !status.includes("send"));
 
+  if (embedded) {
+    return (
+      <div className="space-y-1">
+        <p className="text-[11px] leading-4 text-slate-500">
+          {mode === "update"
+            ? "The planned date stays on the left of each field. If it slipped, set the new date and a short reason."
+            : "One date per stage, then Record."}
+        </p>
+        <div className="divide-y divide-white/[0.06] overflow-hidden rounded-lg border border-white/[0.08]">
+          {lane !== "animation" && (
+            <PlanDates
+              promo={promo}
+              partNo={0}
+              rowLabel="Asset"
+              cells={snap.plannerCells}
+              embedded
+              showTimes={mode === "update"}
+              askDelay={mode === "update"}
+              plannedHint={promo.preProd?.plannedDate}
+              open={!promoClosed && !assetsClosed}
+              slots={[
+                { label: "Assets", match: "asset", enabled: true },
+                { label: "Rough cut", match: "rough cut|first cut|first animation|first edit", enabled: false },
+                { label: "Final cut", match: "final cut|second cut|correction close", enabled: false },
+                { label: "Sound", match: "sound", enabled: false },
+              ]}
+            />
+          )}
+          {lane !== "asset" &&
+            parts.map((part) => (
+              <PlanDates
+                key={part.id}
+                promo={promo}
+                partNo={part.partNo}
+                rowLabel={`P${part.partNo}`}
+                cells={snap.plannerCells}
+                embedded
+                showTimes={mode === "update"}
+                askDelay={mode === "update"}
+                plannedHint={part.plannedPlottedDate || part.deadline || part.plannedDate}
+                open={!promoClosed && part.stage !== "delivered"}
+                slots={[
+                  { label: "Assets", match: "asset", enabled: false },
+                  { label: "Rough cut", match: "rough cut|first cut|first animation|first edit", enabled: true },
+                  { label: "Final cut", match: "final cut|second cut|correction close", enabled: true },
+                  { label: "Sound", match: "sound", enabled: true },
+                ]}
+              />
+            ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <div>
@@ -164,6 +218,7 @@ function PlanDates({
   showTimes = true,
   askDelay = false,
   plannedHint = null,
+  rowLabel = "",
   slots,
 }: {
   promo: Promo;
@@ -174,6 +229,7 @@ function PlanDates({
   showTimes?: boolean;
   askDelay?: boolean;
   plannedHint?: string | null;
+  rowLabel?: string;
   slots: { label: string; match: string; enabled: boolean }[];
 }) {
   const { act } = useOps();
@@ -242,80 +298,75 @@ function PlanDates({
 
   if (embedded) {
     const shown = slots.filter((slot) => slot.enabled);
+    const field = "h-7 rounded border border-white/[0.1] bg-[#0e0e13] px-1.5 text-[12px] text-white";
     return (
-      <td colSpan={5} className="px-3 py-3">
-        <div className="space-y-3">
-          {shown.map((slot) => (
-            <div key={slot.label}>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{slot.label}</p>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1">
+        <span className="w-10 shrink-0 text-[12px] font-semibold text-white">{rowLabel}</span>
+        {shown.map((slot) => {
+          const planned = formatDmy(fromSheet[slot.label]?.date || plannedHint);
+          return (
+            <div key={slot.label} className="flex items-center gap-1.5">
+              <span className="text-[11px] text-slate-400">{slot.label}</span>
               {!open ? (
-                <p className="mt-1 font-semibold text-slate-200">
+                <span className="text-[12px] text-slate-200">
                   {formatDmy(savedDates[slot.label]) || "—"}
-                  {times[slot.label] ? ` · ${slotLabel(times[slot.label] ?? "") ?? times[slot.label]}` : ""}
-                </p>
+                  {times[slot.label] ? ` · ${slotLabel(times[slot.label] ?? "") ?? ""}` : ""}
+                </span>
               ) : (
-                <div className="mt-1 space-y-1.5">
-                  {askDelay && (
-                    <p className="text-[11px] text-slate-300">
-                      Planned {formatDmy(fromSheet[slot.label]?.date || plannedHint) || "—"}
-                    </p>
-                  )}
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                    {askDelay ? "Update date" : "Date"}
-                  </p>
+                <>
+                  {askDelay && <span className="text-[11px] text-slate-500">{planned}</span>}
                   <input
                     type="date"
+                    aria-label={askDelay ? `${slot.label} update date` : `${slot.label} date`}
                     value={draft[slot.label] ?? ""}
                     onChange={(e) => setDraft((d) => ({ ...d, [slot.label]: e.target.value }))}
-                    className="w-full rounded-md border border-white/[0.1] bg-[#0e0e13] px-2 py-1 text-[12px] text-white"
+                    className={`${field} w-[8.6rem]`}
                   />
                   {askDelay && (
                     <input
                       value={reasons[slot.label] ?? ""}
                       onChange={(e) => setReasons((current) => ({ ...current, [slot.label]: e.target.value }))}
-                      placeholder="Delay reason"
-                      className="w-full rounded-md border border-white/[0.1] bg-[#0e0e13] px-2 py-1 text-[12px] text-white placeholder:text-slate-500"
+                      placeholder="Reason"
+                      aria-label={`${slot.label} delay reason`}
+                      className={`${field} w-28 placeholder:text-slate-500`}
                     />
                   )}
-                  {showTimes && (
-                    <div className="flex flex-wrap gap-1">
-                      {TIMES.map((time) => (
-                        <button
-                          key={time}
-                          type="button"
-                          disabled={!draft[slot.label]}
-                          onClick={() =>
-                            setTimes((current) => ({
-                              ...current,
-                              [slot.label]: current[slot.label] === time ? null : time,
-                            }))
-                          }
-                          className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
-                            times[slot.label] === time ? "bg-[#4361ee]/40 text-white" : "bg-white/[0.06] text-slate-400"
-                          } disabled:opacity-40`}
-                        >
-                          {slotLabel(time) ?? time}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                  {showTimes &&
+                    TIMES.map((time) => (
+                      <button
+                        key={time}
+                        type="button"
+                        disabled={!draft[slot.label]}
+                        onClick={() =>
+                          setTimes((current) => ({
+                            ...current,
+                            [slot.label]: current[slot.label] === time ? null : time,
+                          }))
+                        }
+                        className={`h-7 rounded px-1.5 text-[10px] font-bold ${
+                          times[slot.label] === time ? "bg-[#4361ee] text-white" : "bg-white/[0.06] text-slate-400"
+                        } disabled:opacity-40`}
+                      >
+                        {slotLabel(time) ?? time}
+                      </button>
+                    ))}
+                </>
               )}
             </div>
-          ))}
-          {open && (
-            <button
-              type="button"
-              disabled={!dirty}
-              onClick={record}
-              className="rounded-md bg-[#4361ee] px-2.5 py-1 text-[11px] font-bold text-white disabled:opacity-40"
-            >
-              Record
-            </button>
-          )}
-          {error && <p className="text-[11px] text-rose-300">{error}</p>}
-        </div>
-      </td>
+          );
+        })}
+        {open && (
+          <button
+            type="button"
+            disabled={!dirty}
+            onClick={record}
+            className="h-7 rounded bg-[#4361ee] px-2.5 text-[11px] font-bold text-white disabled:opacity-40"
+          >
+            Record
+          </button>
+        )}
+        {error && <p className="text-[11px] text-rose-300">{error}</p>}
+      </div>
     );
   }
 
