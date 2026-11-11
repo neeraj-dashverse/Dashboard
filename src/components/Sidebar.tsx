@@ -91,26 +91,28 @@ export function Sidebar() {
           <div className="absolute bottom-6 left-4 right-4 rounded-2xl border border-white/[0.07] bg-white/[0.03] p-3">
             <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
               <span className={`h-1.5 w-1.5 rounded-full ${snap.live ? "bg-emerald-400" : "bg-amber-400"}`} />
-              {snap.live ? "Live" : "Sample data"} · {snap.workingSource.spreadsheetName}
+              {snap.live ? "Live" : "Sample data"}
             </p>
             <p className="mt-1 text-[11px] leading-4 text-slate-400">neeraj.d@dashverse.ai</p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <a
-                href={snap.workingSource.url}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-md border border-white/[0.1] px-2 py-1 text-[10px] font-semibold text-slate-400 hover:text-white"
-              >
-                Master Tracker ↗
-              </a>
-              <a
-                href={snap.assetsSource.url}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-md border border-white/[0.1] px-2 py-1 text-[10px] font-semibold text-slate-400 hover:text-white"
-              >
-                Assets ↗
-              </a>
+            <p className="mb-1 mt-3 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-600">Sheets</p>
+            <div className="space-y-1">
+              {[
+                { label: "Master Tracker", source: snap.workingSource },
+                { label: "Master Sheet", source: snap.source },
+                { label: "Assets", source: snap.assetsSource },
+                { label: "Animation productivity", source: snap.throughputSource },
+              ].map((row) => (
+                <a
+                  key={row.label}
+                  href={row.source.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between rounded-md px-1.5 py-1 text-[10px] font-semibold text-slate-400 hover:bg-white/[0.05] hover:text-white"
+                >
+                  <span className="truncate">{row.label}</span>
+                  <span className="shrink-0 text-slate-600">↗</span>
+                </a>
+              ))}
             </div>
           </div>
         </>

@@ -127,9 +127,6 @@ export function ProductivityBoard() {
               <th className="whitespace-nowrap px-3 py-2.5">Open</th>
               <th className="whitespace-nowrap px-3 py-2.5">Delivered</th>
               <th className="whitespace-nowrap px-3 py-2.5">Worked</th>
-              <th className="whitespace-nowrap px-3 py-2.5" title="Distinct days this animator has a row on the Animation productivity sheet">
-                Days logged
-              </th>
               <th className="whitespace-nowrap px-3 py-2.5" title="Average output minutes per logged day, and their typical Duration worked/day range">
                 Min/day
               </th>
@@ -141,7 +138,7 @@ export function ProductivityBoard() {
           <tbody>
             {people.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={8} className="px-3 py-8 text-center text-slate-500">
                   No animator work on the sheets.
                 </td>
               </tr>
@@ -160,7 +157,6 @@ export function ProductivityBoard() {
                       <td className="px-3 py-2.5 text-slate-200">{person.openParts}</td>
                       <td className="px-3 py-2.5 text-slate-200">{person.deliveredParts}</td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-slate-200">{worked(person.workedSec)}</td>
-                      <td className="px-3 py-2.5 text-slate-200">{person.daysWorked || "—"}</td>
                       <td className="px-3 py-2.5 text-slate-200">
                         {person.minutesPerDay == null ? "—" : person.minutesPerDay}
                         <RangeBadge name={person.name} snap={snap} />
@@ -187,7 +183,7 @@ export function ProductivityBoard() {
                     </tr>
                     {isOpen && (
                       <tr className="bg-white/[0.02]">
-                        <td colSpan={9} className="px-3 pb-4 pt-1">
+                        <td colSpan={8} className="px-3 pb-4 pt-1">
                           <FeedbackPanel
                             name={person.name}
                             feedback={feedback}
