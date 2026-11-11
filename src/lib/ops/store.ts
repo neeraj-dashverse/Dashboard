@@ -36,6 +36,8 @@ function seed(): OpsSnapshot {
     dismissedNudgeIds: [],
     plannerCells: [],
     planRemarks: [],
+    durations: [],
+    attendance: [],
     cpsRoster: [
       ...new Set(
         MOCK_PROMOS.map((p) => p.cps).filter((c): c is string => Boolean(c))

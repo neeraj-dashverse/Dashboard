@@ -28,6 +28,7 @@ import {
   parsePreProd,
   parsePromos,
   parseQuality,
+  parseDurations,
   stubPromo,
   stubPromoFromAsset,
 } from "./sheets-transform";
@@ -61,6 +62,7 @@ import {
   dropPlanRemark,
 } from "./store";
 import { promoJoinKey, type OpsSnapshot, type Promo, type SheetSource, type TeamKind } from "./types";
+import { syncAttendance } from "./attendance-sheet";
 
 const TIMELINE = PFM_TIMELINE_SHEET.spreadsheetId;
 const ASSETS = PFM_ASSETS_SHEET.spreadsheetId;
@@ -71,6 +73,7 @@ const RANGES = {
   preProduction: "'Pre Production Tracker'!A1:J3000",
   masterProductivity: "'Master Productivity'!A1:W5000",
   assets: "'Promos - Assets Master Sheet'!A1:AG3000",
+  duration: "'Duration'!A1:Z2000",
 };
 
 function source(
@@ -154,6 +157,7 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
       RANGES.productionTracker,
       RANGES.preProduction,
       RANGES.masterProductivity,
+      RANGES.duration,
     ]),
     batchGet(ASSETS, [RANGES.assets]),
     loadPlanTabs(),
@@ -172,6 +176,10 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
   const preProdRows: Grid = timeline[RANGES.preProduction] ?? [];
   const qualityRows: Grid = timeline[RANGES.masterProductivity] ?? [];
   const assetRows: Grid = assetsBook[RANGES.assets] ?? [];
+  const attendance = await syncAttendance().catch((err) => {
+    console.error("[ops] Attendance archive failed:", err);
+    return [];
+  });
 
   // Quality reviews first (also a source of animator names).
   const qualityReviews = parseQuality(qualityRows.slice(2));
@@ -277,6 +285,8 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
     dismissedNudgeIds: [],
     plannerCells: parsePlanner(planTabs.planner),
     planRemarks: parseRemarks(planTabs.remarks).reverse(),
+    durations: parseDurations(timeline[RANGES.duration] ?? []),
+    attendance,
     cpsRoster: [
       ...new Set(promos.map((p) => p.cps).filter((c): c is string => Boolean(c))),
     ].sort((a, b) => a.localeCompare(b)),

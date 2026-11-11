@@ -74,6 +74,73 @@ export function formatDuration(sec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/** hh:mm:ss for the Duration tab. */
+export function formatClock(sec: number | null | undefined): string {
+  if (sec == null || sec < 0) return "—";
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+export function findDuration(snap: OpsSnapshot, promoId: string) {
+  const list = snap.durations ?? [];
+  const base = promoId.split("#")[0];
+  const exact = list.find((row) => row.id === promoId || row.id === base);
+  if (exact) return exact;
+  const promo = snap.promos.find((item) => item.id === promoId || item.id.split("#")[0] === base);
+  if (!promo) return undefined;
+  const compact = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const show = compact(promo.showName);
+  const name = compact(promo.promoName);
+  return list.find((row) => compact(row.showName) === show && compact(row.promoName) === name);
+}
+
+function attendanceKey(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function nextIso(iso: string): string {
+  const date = new Date(`${iso}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function leaveRuns(dates: string[]): { start: string; end: string }[] {
+  const sorted = [...new Set(dates)].sort();
+  const runs: { start: string; end: string }[] = [];
+  for (const date of sorted) {
+    const last = runs[runs.length - 1];
+    if (last && nextIso(last.end) === date) last.end = date;
+    else runs.push({ start: date, end: date });
+  }
+  return runs;
+}
+
+/** Animators only. Working, a holiday name, or Leave with the from–to of that stretch. */
+export function animatorToday(snap: OpsSnapshot, name: string): string {
+  const mine = (snap.attendance ?? []).filter((day) => attendanceKey(day.name) === attendanceKey(name));
+  const today = mine.find((day) => day.date === snap.today);
+  if (!today) return "—";
+  if (!/^leave$/i.test(today.status)) return today.status;
+  const run = leaveRuns(mine.filter((day) => /^leave$/i.test(day.status)).map((day) => day.date)).find(
+    (span) => span.start <= snap.today && span.end >= snap.today
+  );
+  if (!run) return "Leave";
+  return run.start === run.end ? `Leave ${formatDmy(run.start)}` : `Leave ${formatDmy(run.start)} – ${formatDmy(run.end)}`;
+}
+
+export function animatorLeave(snap: OpsSnapshot, name: string): string {
+  const dates = (snap.attendance ?? [])
+    .filter((day) => attendanceKey(day.name) === attendanceKey(name) && /^leave$/i.test(day.status))
+    .map((day) => day.date);
+  const runs = leaveRuns(dates);
+  if (!runs.length) return "";
+  return runs
+    .map((run) => (run.start === run.end ? formatDmy(run.start) : `${formatDmy(run.start)} – ${formatDmy(run.end)}`))
+    .join(", ");
+}
+
 export function promoFor(snap: OpsSnapshot, promoId: string): Promo | undefined {
   return snap.promos.find((p) => p.id === promoId);
 }

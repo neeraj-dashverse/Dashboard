@@ -18,6 +18,7 @@ import type {
   AssetTeamRow,
   DailyThroughputLog,
   Part,
+  PromoDuration,
   PipelineStage,
   PreProdAssetRow,
   Promo,
@@ -631,4 +632,39 @@ function displayNameFor(
   }
   const q = qualityAnimators.find((n) => normKey(n) === key);
   return q ?? null;
+}
+
+/** Timeline · Duration tab. A filled PS column is one power start. Its length is that column minus column E. */
+export function parseDurations(rows: Grid): PromoDuration[] {
+  const header = rows[0] ?? [];
+  const ctaCol = header.findIndex((cell) => /worked duration with cta/i.test(String(cell ?? "")));
+  const totalCol = header.findIndex((cell) => /^total duration$/i.test(String(cell ?? "").trim()));
+  const psCols = header
+    .map((cell, index) => {
+      const match = String(cell ?? "").match(/ps\s*(\d+)/i);
+      return match ? { index, label: `PS${match[1]}` } : null;
+    })
+    .filter((col): col is { index: number; label: string } => !!col);
+  const out: PromoDuration[] = [];
+  for (const row of rows.slice(1)) {
+    const showName = text(row[0]);
+    const promoName = text(row[1]) ?? "";
+    if (!showName || normKey(showName) === "show_name") continue;
+    const workedWithCtaSec = ctaCol >= 0 ? durationToSec(row[ctaCol]) : null;
+    const powerStarts = psCols.flatMap((col) => {
+      const withCtaSec = durationToSec(row[col.index]);
+      if (withCtaSec == null) return [];
+      const lengthSec = workedWithCtaSec == null ? null : withCtaSec - workedWithCtaSec;
+      return [{ label: col.label, withCtaSec, lengthSec }];
+    });
+    out.push({
+      id: promoJoinKey(showName, promoName),
+      showName,
+      promoName,
+      workedWithCtaSec,
+      totalSec: totalCol >= 0 ? durationToSec(row[totalCol]) : null,
+      powerStarts,
+    });
+  }
+  return out;
 }

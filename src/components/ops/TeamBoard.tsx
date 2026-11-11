@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { formatDmy, teamGroups, type TeamGroupId } from "@/lib/ops/selectors";
+import { animatorToday, formatDmy, teamGroups, type TeamGroupId } from "@/lib/ops/selectors";
 import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
 
@@ -70,9 +70,10 @@ export function TeamBoard() {
               <table className="w-full table-fixed text-left text-[13px]">
                 <thead className="text-[10px] uppercase tracking-wider text-slate-300">
                   <tr>
-                    <th className="w-[22%] px-4 py-3 font-semibold">Person</th>
-                    <th className="w-[48%] px-4 py-3 font-semibold">Plotted</th>
-                    <th className="w-[30%] px-4 py-3 font-semibold">Free</th>
+                    <th className="w-[20%] px-4 py-3 font-semibold">Person</th>
+                    {opened.id === "animation" && <th className="w-[18%] px-4 py-3 font-semibold">Today</th>}
+                    <th className="px-4 py-3 font-semibold">Plotted</th>
+                    <th className="w-[24%] px-4 py-3 font-semibold">Free</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.08]">
@@ -90,6 +91,11 @@ export function TeamBoard() {
                             >
                               {whenFree(person.freeAt, snap.today, person.holds.length > 0)}
                             </span>
+                          </td>
+                        )}
+                        {index === 0 && opened.id === "animation" && (
+                          <td rowSpan={rows.length} className="px-4 py-3 text-[12px] font-semibold text-slate-200">
+                            {animatorToday(snap, person.name)}
                           </td>
                         )}
                         <td className="px-4 py-3">

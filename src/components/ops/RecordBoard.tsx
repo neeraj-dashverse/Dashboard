@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { formatDmy, promoRecords } from "@/lib/ops/selectors";
+import { formatDmy, findDuration, formatClock, promoRecords } from "@/lib/ops/selectors";
 import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
 
@@ -109,6 +109,11 @@ export function RecordBoard() {
   const [showFilters, setShowFilters] = useState<string[]>([]);
   const [promoFilters, setPromoFilters] = useState<string[]>([]);
 
+  const durationById = useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const record of records) labels.set(record.id, formatClock(findDuration(snap, record.id)?.totalSec));
+    return labels;
+  }, [records, snap]);
   const shows = useMemo(() => uniqueNames(records.map((record) => record.showName)), [records]);
   const promoOptions = useMemo(() => {
     const pool = showFilters.length
@@ -201,6 +206,7 @@ export function RecordBoard() {
             <tr>
               <th className="whitespace-nowrap px-3 py-2.5">Show</th>
               <th className="whitespace-nowrap px-3 py-2.5">Promo</th>
+              <th className="whitespace-nowrap px-3 py-2.5">Duration</th>
               <th className="whitespace-nowrap px-3 py-2.5">Pre-production start</th>
               <th className="whitespace-nowrap px-3 py-2.5">Pre-production end</th>
               <th className="whitespace-nowrap px-3 py-2.5">Production start</th>
@@ -211,7 +217,7 @@ export function RecordBoard() {
           <tbody>
             {shown.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={8} className="px-3 py-8 text-center text-slate-500">
                   No promos match.
                 </td>
               </tr>
@@ -238,6 +244,9 @@ export function RecordBoard() {
                     >
                       {record.promoName || "—"}
                     </Link>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-slate-300">
+                    {durationById.get(record.id) ?? "—"}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-slate-300">
                     {when(record.assetStart)}

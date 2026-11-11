@@ -476,6 +476,26 @@ export type QualityReview = {
   } | null;
 };
 
+export type PromoDuration = {
+  id: string;
+  showName: string;
+  promoName: string;
+  /** Duration tab column E, Worked duration with CTA. */
+  workedWithCtaSec: number | null;
+  /** Duration tab Total duration. */
+  totalSec: number | null;
+  /** One entry per filled "Duration with PSn and CTA" column. Length is that column minus column E. */
+  powerStarts: { label: string; withCtaSec: number; lengthSec: number | null }[];
+};
+
+export type AttendanceDay = {
+  name: string;
+  /** ISO yyyy-mm-dd */
+  date: string;
+  /** Working, Leave, or a holiday name such as Sunday or Diwali. */
+  status: string;
+};
+
 export type OpsSnapshot = {
   today: string;
   /** True when this snapshot was hydrated from Google Sheets. */
@@ -506,6 +526,12 @@ export type OpsSnapshot = {
   plannerCells: PlannerCell[];
   /** One row each on the Timeline sheet's Remarks tab. Never overwritten. */
   planRemarks: PlanRemark[];
+  /** Timeline sheet · Duration tab. One row per show + promo. */
+  durations: PromoDuration[];
+  /**
+   * Current month of the Attendence tab only. Older months stay on the Attendance log sheet.
+   */
+  attendance: AttendanceDay[];
 };
 
 /** Stable join key — must match across Master / PocketFM / Assets. */

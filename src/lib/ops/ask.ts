@@ -1,9 +1,13 @@
 import type { OpsSnapshot, Part, Promo, QualityReview } from "./types";
 import {
   animatorProductivity,
+  animatorLeave,
+  animatorToday,
   daysLate,
   formatDmy,
   formatDuration,
+  findDuration,
+  formatClock,
   promoFor,
   qualityForAnimator,
   qualityForEditor,
@@ -17,11 +21,21 @@ export type AskChoice = {
   label: string;
 };
 
+export type AskTable = {
+  title?: string;
+  columns: string[];
+  rows: string[][];
+};
+
 export type AskReply = {
   heading: string;
   lines: string[];
   /** More than one sheet row fits the question. The person picks one. */
   choices?: AskChoice[];
+  table?: AskTable;
+  tables?: AskTable[];
+  /** The promo or person this answer is about, so the next question can follow it. */
+  focus?: AskChoice;
 };
 
 function norm(value: string): string {
@@ -175,6 +189,127 @@ function plotDate(part: Part): string | null {
   return part.plannedPlottedDate ?? part.deadline ?? part.plannedDate;
 }
 
+function samePerson(a: string, b: string): boolean {
+  const left = norm(a);
+  const right = norm(b);
+  if (!left || !right) return false;
+  return left === right || left.startsWith(right) || right.startsWith(left);
+}
+
+function sameTitle(a: string, b: string): boolean {
+  const left = norm(a);
+  const right = norm(b);
+  if (!left || !right || left.length < 3 || right.length < 3) return false;
+  return left === right || left.includes(right) || right.includes(left);
+}
+
+function productivityFor(snap: OpsSnapshot, name: string, showName: string, promoName: string) {
+  const logs = snap.dailyLogs.filter(
+    (log) =>
+      samePerson(log.artist, name) &&
+      (sameTitle(log.showName, showName) || sameTitle(log.promoName, promoName) || sameTitle(log.promoName, showName))
+  );
+  const days = new Set(logs.map((log) => log.date)).size;
+  const minutes = logs.reduce((sum, log) => sum + log.outputMinutes, 0);
+  return {
+    days: days ? String(days) : "—",
+    minutes: minutes ? String(Math.round(minutes)) : "—",
+  };
+}
+
+function qualityFor(snap: OpsSnapshot, name: string, promoId: string): string {
+  const reviews = qualityForAnimator(snap, name).filter(
+    (review) => review.promoId === promoId || review.promoId.split("#")[0] === promoId.split("#")[0]
+  );
+  const scores = reviews
+    .map((review) => review.animation?.overallQuality)
+    .filter((score): score is number => score != null);
+  if (!scores.length) return "—";
+  const average = Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 10) / 10;
+  return `${average}/5`;
+}
+
+/** Production Tracker artist joined to that show on the Animation productivity sheet. */
+function personWorkTable(snap: OpsSnapshot, name: string): AskTable {
+  const rows: string[][] = [];
+  const seen = new Set<string>();
+  for (const part of snap.parts) {
+    const names = `${part.artist ?? ""}, ${part.editors ?? ""}`
+      .split(/[,，;/]|&| and /i)
+      .map((item) => item.trim())
+      .filter((item) => samePerson(item, name));
+    if (!names.length) continue;
+    const promo = snap.promos.find((item) => item.id === part.promoId || item.id.split("#")[0] === part.promoId);
+    const show = promo?.showName || part.promoId.split("|")[0] || "—";
+    const script = promo?.promoName || part.promoId.split("|")[1] || "—";
+    const key = `${show}|${script}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const work = productivityFor(snap, name, show, script);
+    rows.push([
+      show,
+      script || "—",
+      STAGE_LABEL[part.stage] ?? part.stage,
+      plotDate(part) ? formatDmy(plotDate(part)) : "—",
+      work.days,
+      work.minutes,
+      qualityFor(snap, name, part.promoId),
+    ]);
+  }
+  return {
+    columns: ["Show", "Promo", "Stage", "Plot", "Days", "Minutes", "Quality"],
+    rows: rows.slice(0, 8),
+    title: "Matched to the productivity sheet",
+  };
+}
+
+/** Quality reviews for this person, including promos that are already delivered. */
+function personFeedbackTable(snap: OpsSnapshot, name: string): AskTable {
+  const rows = qualityForAnimator(snap, name).map((review) => {
+    const promo = promoFor(snap, review.promoId);
+    const note = review.animation?.remark || review.animation?.weakAreas || review.editing?.remark || "—";
+    return [
+      promo?.showName || review.promoId.split("|")[0] || "—",
+      promo?.promoName || "—",
+      `P${review.partNo}`,
+      review.animation?.overallQuality != null ? `${review.animation.overallQuality}/5` : "—",
+      note.length > 140 ? `${note.slice(0, 140)}…` : note,
+    ];
+  });
+  return {
+    title: "Feedback, including older promos",
+    columns: ["Show", "Promo", "Part", "Rating", "Feedback"],
+    rows: rows.slice(0, 12),
+  };
+}
+
+function promoWorkTable(snap: OpsSnapshot, promo: Promo): AskTable {
+  const base = promo.id.split("#")[0];
+  const parts = snap.parts
+    .filter((part) => part.promoId === base || part.promoId.split("#")[0] === base)
+    .filter((part) => part.stage !== "delivered")
+    .sort((a, b) => a.partNo - b.partNo);
+  const rows = parts.map((part) => {
+    const artist = part.artist?.trim() || "—";
+    const work = artist === "—" ? { days: "—", minutes: "—" } : productivityFor(snap, artist, promo.showName, promo.promoName);
+    return [
+      `P${part.partNo}`,
+      artist,
+      part.team === "agency" ? "Agency" : "In house",
+      STAGE_LABEL[part.stage] ?? part.stage,
+      plotDate(part) ? formatDmy(plotDate(part)) : "—",
+      work.days,
+      work.minutes,
+      artist === "—" ? "—" : qualityFor(snap, artist, promo.id),
+    ];
+  });
+  return {
+    columns: ["Part", "Artist", "Team", "Stage", "Plot", "Days", "Minutes", "Quality"],
+    rows,
+    title: "Parts and the productivity logged for each artist",
+  };
+}
+
 function answerPerson(snap: OpsSnapshot, name: string): string[] {
   const lines: string[] = [];
   const placements = teamGroups(snap).flatMap((group) =>
@@ -231,7 +366,81 @@ function answerPerson(snap: OpsSnapshot, name: string): string[] {
     lines.push(...allNotes.slice(0, 6));
   }
   lines.push(...productivityLines(snap, name));
+  lines.push(...workedDaysLines(snap, name));
+  const today = animatorToday(snap, name);
+  const leaves = animatorLeave(snap, name);
+  if (today !== "—") lines.push(`${name} is marked ${today} on the attendance record.`);
+  lines.push(
+    leaves
+      ? `${name} has leave this month on ${leaves}. Earlier months stay on the Attendance log sheet.`
+      : `${name} has no leave days in the saved attendance.`
+  );
   return lines;
+}
+
+/** Compresses a sorted list of ISO dates into "3, 4, 5 Nov" style runs, split by month. */
+function formatDateList(dates: string[]): string {
+  const sorted = [...new Set(dates)].sort();
+  const byMonth = new Map<string, number[]>();
+  for (const iso of sorted) {
+    const [, month, day] = iso.split("-");
+    const label = new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
+    const key = `${label}`;
+    const list = byMonth.get(key) ?? [];
+    list.push(Number(day));
+    byMonth.set(key, list);
+    void month;
+  }
+  const chunks: string[] = [];
+  for (const [month, days] of byMonth) {
+    chunks.push(`${formatPartList(days)} ${month}`);
+  }
+  return chunks.join(", ");
+}
+
+/** Worked days from the Animation productivity daily log, with a Production Tracker fallback. */
+function workedDaysLines(snap: OpsSnapshot, name: string): string[] {
+  const logs = snap.dailyLogs
+    .filter((log) => samePerson(log.artist, name))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (logs.length > 0) {
+    const byShow = new Map<string, { show: string; promo: string; dates: string[]; minutes: number }>();
+    for (const log of logs) {
+      const key = `${log.showName}|${log.promoName}`;
+      const bucket = byShow.get(key) ?? { show: log.showName, promo: log.promoName, dates: [], minutes: 0 };
+      bucket.dates.push(log.date);
+      bucket.minutes += log.outputMinutes || 0;
+      byShow.set(key, bucket);
+    }
+    const allDates = [...new Set(logs.map((log) => log.date))];
+    const lines = [
+      `${name} has ${allDates.length} logged work day${allDates.length === 1 ? "" : "s"} on the Animation productivity sheet: ${formatDateList(allDates)}.`,
+    ];
+    for (const bucket of byShow.values()) {
+      const title = bucket.promo ? `${bucket.show} · ${bucket.promo}` : bucket.show;
+      lines.push(
+        `${title}: ${bucket.dates.length} day${bucket.dates.length === 1 ? "" : "s"} (${formatDateList(bucket.dates)}), ${Math.round(bucket.minutes)} min.`
+      );
+    }
+    return lines;
+  }
+  // Fallback: the Animation productivity sheet is empty, so read activity off the parts this person holds.
+  const events = new Map<string, string>();
+  for (const part of snap.parts) {
+    const names = `${part.artist ?? ""}, ${part.editors ?? ""}`.split(/[,，;/]|&| and /i).map((item) => item.trim());
+    if (!names.some((item) => samePerson(item, name))) continue;
+    for (const date of [part.aniStartDate, part.aniCloseDate, part.plannedPlottedDate]) {
+      if (!date) continue;
+      const promo = snap.promos.find((item) => item.id === part.promoId || item.id.split("#")[0] === part.promoId);
+      events.set(date, promo?.showName || part.promoId.split("|")[0] || "—");
+    }
+  }
+  if (events.size === 0) return [`No daily log or plotted dates found for ${name}.`];
+  const dates = [...events.keys()].sort();
+  return [
+    `The Animation productivity sheet has no rows for ${name} yet, so this is from the Production Tracker's start, close, and plot dates instead.`,
+    `Active on: ${formatDateList(dates)} (${dates.length} date${dates.length === 1 ? "" : "s"}).`,
+  ];
 }
 
 function productivityLines(snap: OpsSnapshot, name: string): string[] {
@@ -286,6 +495,28 @@ function feedbackLines(snap: OpsSnapshot, reviews: QualityReview[], kind: "anima
   });
 }
 
+function powerStartFacts(snap: OpsSnapshot, promo: Promo): string[] {
+  const row = findDuration(snap, promo.id);
+  const title = promo.promoName ? `${promo.showName} · ${promo.promoName}` : promo.showName;
+  if (!row) return [`The Duration tab has no row for ${title}.`];
+  if (row.powerStarts.length === 0) {
+    return [
+      `${title} has no power starts. None of the PS columns on the Duration tab are filled. Total duration is ${formatClock(row.totalSec)}.`,
+    ];
+  }
+  const each = row.powerStarts
+    .map((start) => {
+      const length = start.lengthSec == null ? "unknown" : `${start.lengthSec} sec`;
+      return `${start.label} is ${length} (${formatClock(start.withCtaSec)} minus the CTA ${formatClock(row.workedWithCtaSec)})`;
+    })
+    .join("; ");
+  return [
+    `${title} has ${row.powerStarts.length} power start${row.powerStarts.length === 1 ? "" : "s"}, one for each filled PS column on the Duration tab.`,
+    `Power start length is that column minus Worked duration with CTA. ${each}.`,
+    `Total duration is ${formatClock(row.totalSec)}.`,
+  ];
+}
+
 function answerPromo(snap: OpsSnapshot, promo: Promo): string[] {
   const base = promo.id.split("#")[0];
   const parts = snap.parts
@@ -297,11 +528,15 @@ function answerPromo(snap: OpsSnapshot, promo: Promo): string[] {
     return [
       `${title} has no production parts yet.`,
       status ? `Pre-production status is ${status}.` : "It is not on the production tracker.",
+      ...powerStartFacts(snap, promo),
     ];
   }
   const open = parts.filter((part) => part.stage !== "delivered");
   if (open.length === 0) {
-    return [`${title} is closed on the production sheet. All ${parts.length} parts are Delivered.`];
+    return [
+      `${title} is closed on the production sheet. All ${parts.length} parts are Delivered.`,
+      ...powerStartFacts(snap, promo),
+    ];
   }
 
   const stages = [...new Set(open.map((part) => STAGE_LABEL[part.stage] ?? part.stage))];
@@ -345,6 +580,7 @@ function answerPromo(snap: OpsSnapshot, promo: Promo): string[] {
   }
   const remain = open.reduce((sum, part) => sum + (part.durationSec || 0), 0);
   if (remain > 0) lines.push(`Open parts still add up to ${formatDuration(remain)} of duration.`);
+  lines.push(...powerStartFacts(snap, promo));
   lines.push(...sheetFacts(snap, promo));
   return lines;
 }
@@ -479,26 +715,77 @@ function rankedChoices(snap: OpsSnapshot, question: string): { score: number; ch
   return found.sort((a, b) => b.score - a.score || a.choice.label.localeCompare(b.choice.label));
 }
 
+function replyFor(snap: OpsSnapshot, choice: AskChoice): AskReply {
+  if (choice.kind === "person") {
+    const tables = [personWorkTable(snap, choice.id), personFeedbackTable(snap, choice.id)].filter(
+      (table) => table.rows.length > 0
+    );
+    return {
+      heading: choice.label,
+      lines: answerPerson(snap, choice.id),
+      table: tables[0],
+      tables,
+      focus: choice,
+    };
+  }
+  const promo = snap.promos.find((item) => item.id === choice.id);
+  if (!promo) return { heading: choice.label, lines: ["That promo is not on the sheets."] };
+  const table = promoWorkTable(snap, promo);
+  return {
+    heading: promo.showName || choice.label,
+    lines: answerPromo(snap, promo),
+    table: table.rows.length ? table : undefined,
+    focus: choice,
+  };
+}
+
 /** Answer from the sheets already loaded in the dashboard. */
-export function answerOps(
-  snap: OpsSnapshot,
-  question: string,
-  pick?: AskChoice
-): AskReply {
+export function answerOps(snap: OpsSnapshot, question: string, pick?: AskChoice, follow?: AskChoice): AskReply {
   const asked = question.trim();
   if (!asked && !pick) {
     return { heading: "Ask about the sheets", lines: ["Name an artist or a show."] };
   }
-  if (pick?.kind === "person") {
-    return { heading: pick.label, lines: answerPerson(snap, pick.id) };
-  }
-  if (pick?.kind === "promo") {
-    const promo = snap.promos.find((item) => item.id === pick.id);
-    if (!promo) return { heading: pick.label, lines: ["That promo is not on the sheets."] };
-    return { heading: promo.showName || pick.label, lines: answerPromo(snap, promo) };
-  }
+  if (pick) return replyFor(snap, pick);
   const ranked = rankedChoices(snap, asked);
   const best = ranked[0];
+  const general = /\bwho is free|what is open|which sheet|past their plotted|what do you (read|use)|available|on leave|who is working\b/i.test(
+    asked
+  );
+  if ((!best || best.score < 70) && /\b(available|on leave|who is working)\b/i.test(asked)) {
+    const names = new Map<string, string>();
+    for (const day of snap.attendance ?? []) {
+      const key = day.name.trim().toLowerCase();
+      if (!names.has(key)) names.set(key, day.name);
+    }
+    const rows = [...names.values()]
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => [name, animatorToday(snap, name), animatorLeave(snap, name) || "—"]);
+    const working = rows.filter((row) => /^working$/i.test(row[1])).map((row) => row[0]);
+    return {
+      heading: "Animators today",
+      lines: [
+        working.length ? `Working today: ${working.join(", ")}.` : "Nobody is marked Working today.",
+        "Leave shown is this month only. Ask about a named person to pull earlier months from the Attendance log sheet.",
+      ],
+      tables: [{ title: "Attendance", columns: ["Animator", "Today", "Leave"], rows }],
+    };
+  }
+  const wantsWorkedDays = /\bwhich (days|dates)|what days|working days\b/i.test(asked) && /\bwork/i.test(asked);
+  if (wantsWorkedDays) {
+    const named = best && best.score >= 70 && best.choice.kind === "person" ? best.choice.label : peopleInQuestion(snap, asked)[0];
+    const name = named ?? follow?.label;
+    if (name) {
+      return {
+        heading: `Worked days — ${name}`,
+        lines: workedDaysLines(snap, name),
+        focus: { kind: "person", id: name, label: name },
+      };
+    }
+  }
+  const followUp = /\b(their|they|them|that|this|same|also|too|again|her|his|its|it's|what about|how about|power\s*starts?|\bps\b|duration|which days|worked days)\b/i.test(
+    asked
+  );
+  if ((!best || best.score < 70) && follow && followUp && !general) return replyFor(snap, follow);
   if (!best) {
     if (/\bsheet|spreadsheet|which tab|where .*(from|stored|saved)|what do you (read|use)|source\b/i.test(asked)) {
       return { heading: "Sheets I use", lines: SHEET_GUIDE };
@@ -507,9 +794,7 @@ export function answerOps(
   }
   const close = ranked.filter((item) => item.score >= best.score - 12);
   const exact = close.filter((item) => item.score >= 100);
-  if (exact.length === 1) {
-    return answerOps(snap, asked, exact[0].choice);
-  }
+  if (exact.length === 1) return replyFor(snap, exact[0].choice);
   return {
     heading: "Which one?",
     lines: [
