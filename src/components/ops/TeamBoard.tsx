@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState } from "react";
 import { animatorToday, formatDmy, teamGroups, type TeamGroupId } from "@/lib/ops/selectors";
-import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
 
 /** An open production or asset row means the person is still plotted, even after the date. */
@@ -31,7 +30,6 @@ export function TeamBoard() {
         <p className="mt-1 text-[12px] text-slate-500">Open a team to see who is plotted and when they free up.</p>
       </div>
 
-      <SyncStrip />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {groups.map((group) => {

@@ -699,19 +699,30 @@ export type DurationProfile = {
   highShare: number | null;
   /** "3-5 min", "<3 min", or "mixed" when it is close to even. null with too little data. */
   typicalRange: "<3 min" | "3-5 min" | "mixed" | null;
+  /**
+   * Earlier half vs. later half of their logged days, by the 3-5 min share.
+   * "up" = moved toward the bigger range over time, "down" = moved toward the smaller range.
+   * null when there are too few days to compare.
+   */
+  trend: "up" | "down" | "flat" | null;
 };
 
 /**
  * Animation productivity · Master data, Duration worked/day column, per artist.
  * Correction rows are excluded from the range read (per Neeraj: correction days don't
- * reflect a normal day's output). Feeds Ask AI's "who delivers more duration" read.
+ * reflect a normal day's output). Feeds Ask AI's "who delivers more duration" read, and
+ * the Productivity table's Min/day column.
  */
 export function durationProfile(snap: OpsSnapshot, name: string): DurationProfile {
   const key = personKey(name);
-  const logs = snap.dailyLogs.filter((log) => personKey(log.artist) === key);
-  const under3 = logs.filter((log) => log.workType === "new" && log.durationBucket === "<3").length;
-  const threeToFive = logs.filter((log) => log.workType === "new" && log.durationBucket === "3-5").length;
-  const corrections = logs.filter((log) => log.workType === "correction").length;
+  const ranged = snap.dailyLogs
+    .filter((log) => personKey(log.artist) === key && log.workType === "new" && log.durationBucket != null)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const under3 = ranged.filter((log) => log.durationBucket === "<3").length;
+  const threeToFive = ranged.filter((log) => log.durationBucket === "3-5").length;
+  const corrections = snap.dailyLogs.filter(
+    (log) => personKey(log.artist) === key && log.workType === "correction"
+  ).length;
   const totalRangedDays = under3 + threeToFive;
   const highShare = totalRangedDays > 0 ? Math.round((threeToFive / totalRangedDays) * 100) / 100 : null;
   const typicalRange =
@@ -722,7 +733,20 @@ export function durationProfile(snap: OpsSnapshot, name: string): DurationProfil
         : highShare <= 0.4
           ? "<3 min"
           : "mixed";
-  return { name, under3, threeToFive, corrections, totalRangedDays, highShare, typicalRange };
+
+  let trend: DurationProfile["trend"] = null;
+  if (totalRangedDays >= 4) {
+    const mid = Math.floor(ranged.length / 2);
+    const share = (rows: typeof ranged) =>
+      rows.length ? rows.filter((log) => log.durationBucket === "3-5").length / rows.length : null;
+    const early = share(ranged.slice(0, mid));
+    const late = share(ranged.slice(mid));
+    if (early != null && late != null) {
+      const delta = late - early;
+      trend = delta >= 0.15 ? "up" : delta <= -0.15 ? "down" : "flat";
+    }
+  }
+  return { name, under3, threeToFive, corrections, totalRangedDays, highShare, typicalRange, trend };
 }
 
 /** Every artist with a daily log, ranked by who most often delivers the bigger 3-5 min range. */

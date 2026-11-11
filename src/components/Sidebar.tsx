@@ -89,10 +89,11 @@ export function Sidebar() {
           </nav>
 
           <div className="absolute bottom-6 left-4 right-4 rounded-2xl border border-white/[0.07] bg-white/[0.03] p-3">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Dashverse Ops</p>
-            <p className="mt-1 text-[11px] leading-4 text-slate-400">
-              Live from Google Sheets · neeraj.d@dashverse.ai
+            <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <span className={`h-1.5 w-1.5 rounded-full ${snap.live ? "bg-emerald-400" : "bg-amber-400"}`} />
+              {snap.live ? "Live" : "Sample data"} · {snap.workingSource.spreadsheetName}
             </p>
+            <p className="mt-1 text-[11px] leading-4 text-slate-400">neeraj.d@dashverse.ai</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <a
                 href={snap.workingSource.url}

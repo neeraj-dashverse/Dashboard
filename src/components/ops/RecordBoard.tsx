@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDmy, findDuration, formatClock, promoRecords } from "@/lib/ops/selectors";
-import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
 
 function when(value: string | null | undefined): string {
@@ -161,7 +160,6 @@ export function RecordBoard() {
         <p className="mt-1 text-[12px] text-slate-500">Click a show or promo for its full record.</p>
       </div>
 
-      <SyncStrip />
 
       <div className="flex flex-wrap items-center gap-2">
         <MultiFilter

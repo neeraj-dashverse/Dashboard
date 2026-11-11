@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { buildExceptions, teamGroups } from "@/lib/ops/selectors";
 import { Kpi } from "./ui";
-import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
 
 const PAGES = [
@@ -68,7 +67,6 @@ export function TodayBoard() {
         <p className="text-[12px] tabular-nums text-slate-500">{snap.today}</p>
       </div>
 
-      <SyncStrip />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Kpi label="Overdue" value={overdue} tone={overdue ? "text-rose-300" : "text-white"} />

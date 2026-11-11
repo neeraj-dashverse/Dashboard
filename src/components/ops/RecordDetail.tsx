@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { delayDays, findDuration, formatClock, formatDmy, formatDuration, STAGE_LABEL } from "@/lib/ops/selectors";
 import type { AssetTeamRow, Part, PreProdAssetRow, Promo, QualityReview } from "@/lib/ops/types";
-import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
 
 function duration(seconds: number | null | undefined): string {
@@ -133,7 +132,6 @@ export function RecordDetail({ promoId }: { promoId: string }) {
           {promo?.priority && <Pill>{promo.priority}</Pill>}
         </div>
       </div>
-      <SyncStrip />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
         <Stat label="Duration" value={formatClock(sheetDuration?.totalSec)} />

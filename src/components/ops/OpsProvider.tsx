@@ -22,9 +22,12 @@ const OpsContext = createContext<OpsContextValue | null>(null);
 
 export function OpsProvider({
   initial,
+  canEdit = true,
   children,
 }: {
   initial: OpsSnapshot;
+  /** Viewers can still refresh (reset), but every write action (act/flush) is a no-op with a notice. */
+  canEdit?: boolean;
   children: ReactNode;
 }) {
   const [snap, setSnap] = useState(initial);
@@ -46,15 +49,22 @@ export function OpsProvider({
     }
   }, []);
 
+  const blocked = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.alert("You have view-only access. Ask Neeraj for edit access to make changes.");
+    }
+    return Promise.resolve();
+  }, []);
+
   const value = useMemo<OpsContextValue>(
     () => ({
       snap,
       busy,
-      act: (action, opts) => post({ action }, Boolean(opts?.quiet)),
-      flush: () => post({ flush: true }),
+      act: canEdit ? (action, opts) => post({ action }, Boolean(opts?.quiet)) : blocked,
+      flush: canEdit ? () => post({ flush: true }) : blocked,
       reset: () => post({ reset: true }),
     }),
-    [snap, busy, post]
+    [snap, busy, post, canEdit, blocked]
   );
 
   return <OpsContext.Provider value={value}>{children}</OpsContext.Provider>;

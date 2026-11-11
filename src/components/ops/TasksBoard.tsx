@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { buildTasks, TASK_GROUPS, type IncomingPromo, type TaskItem } from "@/lib/ops/tasks";
-import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
 
 export function TasksBoard({ incoming }: { incoming: IncomingPromo[] }) {
@@ -15,7 +14,6 @@ export function TasksBoard({ incoming }: { incoming: IncomingPromo[] }) {
 
   return (
     <div className="space-y-5">
-      <SyncStrip />
       <div>
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
           PocketFM · Operations

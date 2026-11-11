@@ -4,7 +4,6 @@ import { useMemo, useRef, useState } from "react";
 import { answerOps, type AskChoice, type AskReply } from "@/lib/ops/ask";
 import { buildTurnText, downloadThreadReport, downloadTurnReport } from "@/lib/ops/ask-report";
 import { plannerRows, teamGroups } from "@/lib/ops/selectors";
-import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
 
 type Turn = {
@@ -107,7 +106,6 @@ export function AskBoard() {
           </button>
         )}
       </div>
-      <SyncStrip />
 
       {turns.map((turn) => (
         <section key={turn.id} className="rounded-xl border border-white/[0.12] bg-[#222738] px-5 py-4">

@@ -477,10 +477,18 @@ function productivityLines(snap: OpsSnapshot, name: string): string[] {
   const profile = durationProfile(snap, name);
   if (profile.totalRangedDays > 0) {
     const pct = profile.highShare != null ? Math.round(profile.highShare * 100) : 0;
+    const trendText =
+      profile.trend === "up"
+        ? " They have been trending up — more recent days land in the bigger 3-5 min range than their earlier days."
+        : profile.trend === "down"
+          ? " They have been trending down — more recent days land in the smaller under-3-min range than their earlier days."
+          : profile.trend === "flat"
+            ? " This has stayed steady over time."
+            : "";
     lines.push(
       `Duration worked/day (excluding correction days): ${profile.threeToFive} day${profile.threeToFive === 1 ? "" : "s"} at 3-5 min, ${profile.under3} day${profile.under3 === 1 ? "" : "s"} under 3 min (${pct}% in the bigger range).${
         profile.typicalRange ? ` Typically delivers ${profile.typicalRange} a day.` : ""
-      }`
+      }${trendText}`
     );
   }
   return lines;

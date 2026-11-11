@@ -17,7 +17,6 @@ import { PFM_DROPDOWNS } from "@/lib/ops/sheet-registry";
 import type { PipelineStage } from "@/lib/ops/types";
 import { KindPill, PriorityPill, SectionTitle, StagePill } from "./ui";
 import { PartActions } from "./PartActions";
-import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
 
 /** Read-only labelled value (Master Tracker fields are edited in Sheets). */
@@ -124,7 +123,6 @@ export function PromoDetail({ promoId }: { promoId: string }) {
         </p>
       </div>
 
-      <SyncStrip />
 
       {/* Master Tracker — READ-ONLY (Neeraj edits these directly in Sheets) */}
       <section className="rounded-xl border border-white/[0.08] bg-[#222738] p-4 space-y-4">

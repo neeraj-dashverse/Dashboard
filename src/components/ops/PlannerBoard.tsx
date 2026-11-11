@@ -20,7 +20,6 @@ import {
 import type { Stage } from "@/lib/ops/types";
 import { PromoPlan } from "./PromoPlan";
 import { useOps } from "./OpsProvider";
-import { SyncStrip } from "./SyncStrip";
 
 const STAGE_DOT: Record<Stage, string> = {
   planning: "bg-slate-400",
@@ -263,7 +262,6 @@ export function PlannerBoard() {
         </div>
       </div>
 
-      <SyncStrip />
 
       {sheetMode && (
         <section className="space-y-2 rounded-xl border border-white/[0.12] bg-[#161a26] px-3 py-2">

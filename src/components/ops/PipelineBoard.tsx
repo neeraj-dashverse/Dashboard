@@ -12,7 +12,6 @@ import {
 import type { Part, Stage } from "@/lib/ops/types";
 import { KindPill, Kpi, SectionTitle, StagePill } from "./ui";
 import { PartActions } from "./PartActions";
-import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
 
 export function PipelineBoard() {
@@ -43,7 +42,6 @@ export function PipelineBoard() {
         </p>
       </div>
 
-      <SyncStrip />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <Kpi label="Open parts" value={snap.parts.filter((p) => p.stage !== "delivered").length} />
