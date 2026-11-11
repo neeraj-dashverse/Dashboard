@@ -158,9 +158,7 @@ export function RecordBoard() {
           PocketFM · Operations
         </p>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Record</h1>
-        <p className="mt-1 max-w-3xl text-[12px] leading-5 text-slate-500">
-          Newest pre-production start first. Click a show or promo name for the full record.
-        </p>
+        <p className="mt-1 text-[12px] text-slate-500">Click a show or promo for its full record.</p>
       </div>
 
       <SyncStrip />

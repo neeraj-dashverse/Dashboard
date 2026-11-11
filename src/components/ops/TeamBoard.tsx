@@ -28,14 +28,12 @@ export function TeamBoard() {
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">
           Who is <span className="gradient-text">occupied</span>
         </h1>
-        <p className="mt-1 max-w-3xl text-[12px] text-slate-500">
-          Open a team to see where each person is plotted and when that plot sets them free.
-        </p>
+        <p className="mt-1 text-[12px] text-slate-500">Open a team to see who is plotted and when they free up.</p>
       </div>
 
       <SyncStrip />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {groups.map((group) => {
           const selected = open === group.id;
           return (
@@ -43,15 +41,16 @@ export function TeamBoard() {
               key={group.id}
               type="button"
               onClick={() => setOpen(selected ? null : group.id)}
-              className={`rounded-xl border px-4 py-4 text-left ${
+              className={`rounded-lg border px-3 py-2.5 text-left ${
                 selected ? "border-[#4361ee] bg-[#2a3148]" : "border-white/[0.12] bg-[#222738] hover:border-white/[0.24]"
               }`}
             >
-              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-300">{group.label}</p>
-              <p className="mt-2 text-3xl font-extrabold text-white">{group.people.length}</p>
-              <p className="mt-1 text-[12px] text-slate-300">
-                {group.people.filter((person) => person.holds.length === 0).length} free
-                {selected ? " · Hide" : " · Open"}
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{group.label}</p>
+              <p className="mt-0.5 flex items-baseline gap-1.5">
+                <span className="text-xl font-extrabold text-white">{group.people.length}</span>
+                <span className="text-[11px] text-slate-400">
+                  · {group.people.filter((person) => person.holds.length === 0).length} free
+                </span>
               </p>
             </button>
           );
@@ -84,13 +83,9 @@ export function TeamBoard() {
                         {index === 0 && (
                           <td rowSpan={rows.length} className="px-4 py-3 font-semibold text-white">
                             {person.name}
-                            <span
-                              className={`mt-1 block text-[11px] font-medium ${
-                                person.holds.length === 0 ? "text-emerald-200" : "text-slate-300"
-                              }`}
-                            >
-                              {whenFree(person.freeAt, snap.today, person.holds.length > 0)}
-                            </span>
+                            {person.holds.length === 0 && (
+                              <span className="mt-1 block text-[11px] font-medium text-emerald-200">Free now</span>
+                            )}
                           </td>
                         )}
                         {index === 0 && opened.id === "animation" && (

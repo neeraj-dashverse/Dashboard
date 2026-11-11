@@ -685,6 +685,59 @@ export function animatorProductivity(snap: OpsSnapshot): AnimatorProductivity[] 
     );
 }
 
+export type DurationProfile = {
+  name: string;
+  /** Days logged "Less than 3 min". */
+  under3: number;
+  /** Days logged "3 - 5 min". */
+  threeToFive: number;
+  /** Correction-only days — excluded from the range read, kept for context. */
+  corrections: number;
+  /** under3 + threeToFive. Corrections do not count toward a work-range read. */
+  totalRangedDays: number;
+  /** Share of ranged days in the bigger (3-5 min) bucket, 0–1. Higher = delivers more duration per day. */
+  highShare: number | null;
+  /** "3-5 min", "<3 min", or "mixed" when it is close to even. null with too little data. */
+  typicalRange: "<3 min" | "3-5 min" | "mixed" | null;
+};
+
+/**
+ * Animation productivity · Master data, Duration worked/day column, per artist.
+ * Correction rows are excluded from the range read (per Neeraj: correction days don't
+ * reflect a normal day's output). Feeds Ask AI's "who delivers more duration" read.
+ */
+export function durationProfile(snap: OpsSnapshot, name: string): DurationProfile {
+  const key = personKey(name);
+  const logs = snap.dailyLogs.filter((log) => personKey(log.artist) === key);
+  const under3 = logs.filter((log) => log.workType === "new" && log.durationBucket === "<3").length;
+  const threeToFive = logs.filter((log) => log.workType === "new" && log.durationBucket === "3-5").length;
+  const corrections = logs.filter((log) => log.workType === "correction").length;
+  const totalRangedDays = under3 + threeToFive;
+  const highShare = totalRangedDays > 0 ? Math.round((threeToFive / totalRangedDays) * 100) / 100 : null;
+  const typicalRange =
+    totalRangedDays < 2 || highShare == null
+      ? null
+      : highShare >= 0.6
+        ? "3-5 min"
+        : highShare <= 0.4
+          ? "<3 min"
+          : "mixed";
+  return { name, under3, threeToFive, corrections, totalRangedDays, highShare, typicalRange };
+}
+
+/** Every artist with a daily log, ranked by who most often delivers the bigger 3-5 min range. */
+export function durationRanking(snap: OpsSnapshot): DurationProfile[] {
+  const names = new Set<string>();
+  for (const log of snap.dailyLogs) {
+    const trimmed = log.artist.trim();
+    if (trimmed) names.add(trimmed);
+  }
+  return [...names]
+    .map((name) => durationProfile(snap, name))
+    .filter((profile) => profile.totalRangedDays > 0)
+    .sort((a, b) => (b.highShare ?? 0) - (a.highShare ?? 0) || b.totalRangedDays - a.totalRangedDays);
+}
+
 /** Quality reviews naming this person as editor. */
 export function qualityForEditor(
   snap: OpsSnapshot,

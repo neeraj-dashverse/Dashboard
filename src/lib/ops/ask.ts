@@ -4,6 +4,8 @@ import {
   animatorLeave,
   animatorToday,
   daysLate,
+  durationProfile,
+  durationRanking,
   formatDmy,
   formatDuration,
   findDuration,
@@ -472,6 +474,15 @@ function productivityLines(snap: OpsSnapshot, name: string): string[] {
   for (const note of notes) {
     lines.push(`Daily note ${formatDmy(note.date)}: ${note.remarks}`);
   }
+  const profile = durationProfile(snap, name);
+  if (profile.totalRangedDays > 0) {
+    const pct = profile.highShare != null ? Math.round(profile.highShare * 100) : 0;
+    lines.push(
+      `Duration worked/day (excluding correction days): ${profile.threeToFive} day${profile.threeToFive === 1 ? "" : "s"} at 3-5 min, ${profile.under3} day${profile.under3 === 1 ? "" : "s"} under 3 min (${pct}% in the bigger range).${
+        profile.typicalRange ? ` Typically delivers ${profile.typicalRange} a day.` : ""
+      }`
+    );
+  }
   return lines;
 }
 
@@ -768,6 +779,32 @@ export function answerOps(snap: OpsSnapshot, question: string, pick?: AskChoice,
         "Leave shown is this month only. Ask about a named person to pull earlier months from the Attendance log sheet.",
       ],
       tables: [{ title: "Attendance", columns: ["Animator", "Today", "Leave"], rows }],
+    };
+  }
+  const wantsDurationRanking = /\b(deliver|work)s?\s+(more|longer|the most)\b|\bduration range\b|\bwho (works|delivers|does) (more|longer)\b/i.test(
+    asked
+  );
+  if (wantsDurationRanking) {
+    const ranked = durationRanking(snap).slice(0, 15);
+    const rows = ranked.map((row) => [
+      row.name,
+      `${row.threeToFive}`,
+      `${row.under3}`,
+      row.highShare != null ? `${Math.round(row.highShare * 100)}%` : "—",
+      row.typicalRange ?? "—",
+    ]);
+    const top = ranked.slice(0, 5).map((row) => row.name);
+    return {
+      heading: "Duration worked/day, ranked",
+      lines: [
+        "From the Animation productivity sheet's Duration worked/day column. Correction days are excluded.",
+        top.length
+          ? `Most often in the bigger 3-5 min range: ${top.join(", ")}.`
+          : "Not enough daily rows yet to rank anyone.",
+      ],
+      tables: rows.length
+        ? [{ title: "Duration range by artist", columns: ["Artist", "3-5 min days", "<3 min days", "In 3-5 min", "Typical"], rows }]
+        : undefined,
     };
   }
   const wantsWorkedDays = /\bwhich (days|dates)|what days|working days\b/i.test(asked) && /\bwork/i.test(asked);

@@ -537,11 +537,13 @@ export function parseAssets(rows: Grid): AssetRow[] {
         artist2: text(r[10]),
         artist3: text(r[11]),
         artLead: text(r[12]),
-        startDate: text(r[24]),
-        endDate: text(r[25]),
+        // Assets Master Sheet writes these month/day/year (US format), unlike the Timeline
+        // sheet's day/month/year — normalize to ISO here so every date renders dd/mm/yyyy.
+        startDate: toIsoDate(r[24], "mdy"),
+        endDate: toIsoDate(r[25], "mdy"),
         totalDays: num(r[26]),
-        correctionsStartDate: text(r[27]),
-        correctionsEndDate: text(r[28]),
+        correctionsStartDate: toIsoDate(r[27], "mdy"),
+        correctionsEndDate: toIsoDate(r[28], "mdy"),
         correctionsTotalDays: num(r[29]),
         productionDays: num(r[30]),
         costing: num(r[31]),

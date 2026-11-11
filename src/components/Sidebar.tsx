@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useOps } from "./ops/OpsProvider";
 
 const navItems = [
   { href: "/ask", label: "Ask AI", icon: "✦" },
@@ -18,6 +19,7 @@ function itemClass(active: boolean): string {
 }
 
 export function Sidebar() {
+  const { snap } = useOps();
   const [pathname, setPathname] = useState("");
   const [open, setOpen] = useState(true);
 
@@ -91,6 +93,24 @@ export function Sidebar() {
             <p className="mt-1 text-[11px] leading-4 text-slate-400">
               Live from Google Sheets · neeraj.d@dashverse.ai
             </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <a
+                href={snap.workingSource.url}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md border border-white/[0.1] px-2 py-1 text-[10px] font-semibold text-slate-400 hover:text-white"
+              >
+                Master Tracker ↗
+              </a>
+              <a
+                href={snap.assetsSource.url}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md border border-white/[0.1] px-2 py-1 text-[10px] font-semibold text-slate-400 hover:text-white"
+              >
+                Assets ↗
+              </a>
+            </div>
           </div>
         </>
       )}

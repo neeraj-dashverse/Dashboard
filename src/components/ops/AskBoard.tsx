@@ -95,10 +95,7 @@ export function AskBoard() {
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Ask AI</p>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Ask the sheets</h1>
-          <p className="mt-1 text-[12px] leading-5 text-slate-400">
-            Ask a follow-up in the same thread, or press New question to ask about something else. Feedback includes
-            older promos, not only the ones still open.
-          </p>
+          <p className="mt-1 text-[12px] text-slate-500">Follow up below, or start New question for something else.</p>
         </div>
         {finished.length > 0 && (
           <button

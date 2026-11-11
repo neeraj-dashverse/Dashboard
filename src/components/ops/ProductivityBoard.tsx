@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   animatorProductivity,
   formatDmy,
@@ -8,27 +8,74 @@ import {
   promoFor,
   qualityForAnimator,
 } from "@/lib/ops/selectors";
+import type { QualityReview } from "@/lib/ops/types";
 import { Kpi } from "./ui";
 import { SyncStrip } from "./SyncStrip";
 import { useOps } from "./OpsProvider";
+
+const RECENT_PROMO_COUNT = 3;
 
 function worked(seconds: number): string {
   if (seconds <= 0) return "—";
   return formatDuration(seconds);
 }
 
+/** Last N distinct promos (by sheet order, newest last) shown individually; older ones get one AI summary. */
+function splitFeedback(reviews: QualityReview[]): { recent: QualityReview[]; older: QualityReview[] } {
+  const order: string[] = [];
+  for (const review of reviews) if (!order.includes(review.promoId)) order.push(review.promoId);
+  const recentIds = new Set(order.slice(-RECENT_PROMO_COUNT));
+  return {
+    recent: reviews.filter((review) => recentIds.has(review.promoId)),
+    older: reviews.filter((review) => !recentIds.has(review.promoId)),
+  };
+}
+
 export function ProductivityBoard() {
   const { snap } = useOps();
   const people = useMemo(() => animatorProductivity(snap), [snap]);
   const [open, setOpen] = useState<string | null>(null);
+  const [olderSummary, setOlderSummary] = useState<{ name: string; text: string | null; loading: boolean } | null>(
+    null
+  );
   const asked = people.find((person) => person.name === open) ?? null;
   const feedback = asked ? qualityForAnimator(snap, asked.name) : [];
+  const { recent: recentFeedback, older: olderFeedback } = splitFeedback(feedback);
   const days = asked
     ? snap.dailyLogs
         .filter((log) => log.artist.trim().toLowerCase() === asked.name.trim().toLowerCase())
         .slice()
         .sort((a, b) => b.date.localeCompare(a.date))
     : [];
+
+  useEffect(() => {
+    if (!asked || olderFeedback.length === 0) return;
+    if (olderSummary?.name === asked.name) return;
+    const facts = olderFeedback
+      .map((review) => {
+        const promo = promoFor(snap, review.promoId);
+        const title = promo ? `${promo.showName} · ${promo.promoName}` : review.promoId;
+        const note = review.animation?.remark || review.animation?.weakAreas || review.editing?.remark || "";
+        const rating = review.animation?.overallQuality != null ? `${review.animation.overallQuality}/5` : "—";
+        return `${title}, part ${review.partNo}, rating ${rating}. ${note}`.trim();
+      })
+      .join("\n");
+    setOlderSummary({ name: asked.name, text: null, loading: true });
+    fetch("/api/ops/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: `Summarize ${asked.name}'s feedback on their ${olderFeedback.length} older, already-closed promos in 2-3 sentences. Call out any repeated strength or repeated issue.`,
+        facts,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data: { summary?: string | null }) => {
+        setOlderSummary({ name: asked.name, text: data.summary ?? null, loading: false });
+      })
+      .catch(() => setOlderSummary({ name: asked.name, text: null, loading: false }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asked?.name, olderFeedback.length]);
 
   return (
     <div className="space-y-5">
@@ -37,8 +84,8 @@ export function ProductivityBoard() {
           PocketFM · Operations
         </p>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Productivity</h1>
-        <p className="mt-1 max-w-3xl text-[12px] leading-5 text-slate-500">
-          Each day comes from the Animation productivity sheet, tab Master data. One row per person, show, and promo: Date, POD lead, Artist, Show Name, Promo Name, Parts Worked, and Duration worked/day (Less than 3 min, 3 - 5 min, or correction). Feedback stays hidden until you ask for that animator.
+        <p className="mt-1 text-[12px] text-slate-500">
+          From the Animation productivity sheet. Open an animator for their daily log and feedback.
         </p>
       </div>
 
@@ -107,7 +154,7 @@ export function ProductivityBoard() {
                       onClick={() => setOpen((current) => (current === person.name ? null : person.name))}
                       className="rounded-md bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-[#9bb0ff] hover:bg-white/[0.1]"
                     >
-                      {open === person.name ? "Hide" : "Days"}
+                      {open === person.name ? "Hide" : "Details"}
                     </button>
                   </td>
                 </tr>
@@ -159,14 +206,22 @@ export function ProductivityBoard() {
 
       {asked && (
         <section className="space-y-2">
-          <h2 className="text-[13px] font-bold text-white">Feedback · {asked.name}</h2>
+          <h2 className="text-[13px] font-bold text-white">
+            Feedback · {asked.name}
+            {feedback.length > 0 && (
+              <span className="ml-2 text-[11px] font-normal text-slate-500">
+                Most recent {Math.min(RECENT_PROMO_COUNT, new Set(feedback.map((r) => r.promoId)).size)} promos shown
+                in full · older ones summarized
+              </span>
+            )}
+          </h2>
           {feedback.length === 0 ? (
             <p className="rounded-xl border border-white/[0.08] px-4 py-3 text-[12px] text-slate-500">
               No feedback written for {asked.name}.
             </p>
           ) : (
             <div className="space-y-2">
-              {feedback.map((review) => {
+              {recentFeedback.map((review) => {
                 const promo = promoFor(snap, review.promoId);
                 const notes = [review.animation?.weakAreas, review.animation?.remark, review.editing?.remark]
                   .map((text) => text?.trim())
@@ -196,6 +251,29 @@ export function ProductivityBoard() {
                   </article>
                 );
               })}
+              {olderFeedback.length > 0 && (
+                <article className="rounded-xl border border-dashed border-white/[0.14] bg-white/[0.02] p-4">
+                  <p className="text-[13px] font-semibold text-white">
+                    Older promos — AI summary
+                    <span className="ml-1.5 text-[11px] font-normal text-slate-500">
+                      {new Set(olderFeedback.map((r) => r.promoId)).size} earlier promo
+                      {new Set(olderFeedback.map((r) => r.promoId)).size === 1 ? "" : "s"}
+                    </span>
+                  </p>
+                  {olderSummary?.name !== asked.name || olderSummary.loading ? (
+                    <p className="mt-2 text-[12px] text-slate-500">Reading older feedback…</p>
+                  ) : olderSummary.text ? (
+                    <p className="mt-2 whitespace-pre-wrap text-[12px] leading-5 text-slate-300">
+                      {olderSummary.text}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-[12px] text-slate-500">
+                      Couldn&apos;t reach the summarizer. {olderFeedback.length} older review
+                      {olderFeedback.length === 1 ? "" : "s"} on file — ask AI for the detail.
+                    </p>
+                  )}
+                </article>
+              )}
             </div>
           )}
         </section>

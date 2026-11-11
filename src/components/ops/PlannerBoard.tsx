@@ -126,6 +126,7 @@ export function PlannerBoard() {
   const [sheetMode, setSheetMode] = useState<"plan" | "update" | null>(null);
   const [lane, setLane] = useState<"asset" | "animation">("asset");
   const [promoId, setPromoId] = useState("");
+  const [legendOpen, setLegendOpen] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const pendingToday = useRef(false);
 
@@ -210,7 +211,6 @@ export function PlannerBoard() {
 
   return (
     <div className="space-y-4">
-      <SyncStrip />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
@@ -219,7 +219,7 @@ export function PlannerBoard() {
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Calendar</h1>
           <p className="mt-1 text-[12px] text-slate-500">
             {promoCount} ongoing promos
-            {tab === "production" ? ` · ${rows.length} parts` : ""}. Read-only Gantt from Sheets.
+            {tab === "production" ? ` · ${rows.length} parts` : ""} · read-only from Sheets.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -262,6 +262,8 @@ export function PlannerBoard() {
           ))}
         </div>
       </div>
+
+      <SyncStrip />
 
       {sheetMode && (
         <section className="space-y-2 rounded-xl border border-white/[0.12] bg-[#161a26] px-3 py-2">
@@ -330,46 +332,53 @@ export function PlannerBoard() {
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
-        {(
-          [
-            ["Assets", "Assets"],
-            ["Animation", "Animation"],
-            ["Edit", "Edit"],
-            ["Correction", "Correction"],
-            ["Sound", "Sound"],
-          ] as const
-        ).map(([label]) => (
-          <span key={label} className={`rounded px-1.5 py-0.5 font-semibold ${chipClass(label)}`}>
-            {label}
-          </span>
-        ))}
-        <span className="flex items-center gap-1.5">
-          <span className="rounded border border-dashed border-amber-200/50 bg-amber-400/35 px-1.5 py-0.5 font-semibold text-amber-50">
-            Planned Rough cut
-          </span>
-          date you set
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="rounded bg-violet-500 px-1.5 py-0.5 font-semibold text-white">Animation</span>
-          finished that day
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="rounded bg-rose-400/40 px-1.5 py-0.5 font-semibold text-rose-100">
-            Delay
-          </span>
-          past the cut
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="rounded bg-red-600/80 px-1.5 py-0.5 font-semibold text-white">
-            Extreme
-          </span>
-          3 days or more
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-semibold text-amber-100">Holiday</span>
-          Sunday · 2nd Saturday
-        </span>
+      <div>
+        <button
+          type="button"
+          onClick={() => setLegendOpen((value) => !value)}
+          className="text-[11px] font-semibold text-slate-500 hover:text-slate-300"
+        >
+          {legendOpen ? "Hide legend ▴" : "Legend ▾"}
+        </button>
+        {legendOpen && (
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
+            {(
+              [
+                ["Assets", "Assets"],
+                ["Animation", "Animation"],
+                ["Edit", "Edit"],
+                ["Correction", "Correction"],
+                ["Sound", "Sound"],
+              ] as const
+            ).map(([label]) => (
+              <span key={label} className={`rounded px-1.5 py-0.5 font-semibold ${chipClass(label)}`}>
+                {label}
+              </span>
+            ))}
+            <span className="flex items-center gap-1.5">
+              <span className="rounded border border-dashed border-amber-200/50 bg-amber-400/35 px-1.5 py-0.5 font-semibold text-amber-50">
+                Planned Rough cut
+              </span>
+              date you set
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="rounded bg-violet-500 px-1.5 py-0.5 font-semibold text-white">Animation</span>
+              finished that day
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="rounded bg-rose-400/40 px-1.5 py-0.5 font-semibold text-rose-100">Delay</span>
+              past the cut
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="rounded bg-red-600/80 px-1.5 py-0.5 font-semibold text-white">Extreme</span>
+              3 days or more
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-semibold text-amber-100">Holiday</span>
+              Sunday · 2nd Saturday
+            </span>
+          </div>
+        )}
       </div>
 
       {rows.length === 0 ? (
