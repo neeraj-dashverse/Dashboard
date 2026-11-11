@@ -50,9 +50,9 @@ export const OPS_CONTACT_EMAIL = "neeraj.d@dashverse.ai";
  * See pfm-animation-productivity-schema.md.
  */
 export const ANIMATION_PRODUCTIVITY_SHEET = {
-  spreadsheetId: "1U6fvzf9Fe9ydjCP-lbNoQFjklaPt62-ESxG8Ummh7-s",
+  spreadsheetId: "1U6fvzf9Fe9ydjCP-IbNoQFjklaPt62-ESxG8Ummh7-s",
   spreadsheetName: "Animation productivity",
-  url: "https://docs.google.com/spreadsheets/d/1U6fvzf9Fe9ydjCP-lbNoQFjklaPt62-ESxG8Ummh7-s/edit?gid=0",
+  url: "https://docs.google.com/spreadsheets/d/1U6fvzf9Fe9ydjCP-IbNoQFjklaPt62-ESxG8Ummh7-s/edit?gid=0",
   tabs: {
     masterData: {
       name: "Master data",

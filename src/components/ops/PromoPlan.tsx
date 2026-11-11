@@ -58,6 +58,9 @@ export function PromoPlan({
     Boolean(assetClosedDate(promo)) || (status.includes("approved") && !status.includes("send"));
   const chosenPart = parts.find((part) => part.partNo === updatePart) ?? parts[0];
 
+  const control =
+    "h-9 w-full rounded-lg border border-white/[0.12] bg-[#222738] px-3 text-[13px] text-white";
+
   if (embedded && mode === "update" && lane === "animation") {
     const stageSlots = [
       { label: "Rough cut", match: "rough cut|first cut|first animation|first edit" },
@@ -65,29 +68,37 @@ export function PromoPlan({
       { label: "Sound", match: "sound" },
     ];
     return (
-      <div className="flex flex-wrap items-center gap-1.5">
-        <select
-          value={chosenPart?.partNo ?? ""}
-          onChange={(event) => setUpdatePart(Number(event.target.value))}
-          aria-label="Part"
-          className="h-7 rounded border border-white/[0.1] bg-[#0e0e13] px-1.5 text-[12px] text-white"
-        >
-          {parts.map((part) => (
-            <option key={part.partNo} value={part.partNo}>
-              P{part.partNo}
-            </option>
-          ))}
-        </select>
-        <select
-          value={updateStage}
-          onChange={(event) => setUpdateStage(event.target.value)}
-          aria-label="Stage"
-          className="h-7 rounded border border-white/[0.1] bg-[#0e0e13] px-1.5 text-[12px] text-white"
-        >
-          {stageSlots.map((slot) => (
-            <option key={slot.label}>{slot.label}</option>
-          ))}
-        </select>
+      <div className="space-y-3">
+        <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-[8rem_12rem]">
+          <label className="space-y-1.5">
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Part</span>
+            <select
+              value={chosenPart?.partNo ?? ""}
+              onChange={(event) => setUpdatePart(Number(event.target.value))}
+              aria-label="Part"
+              className={control}
+            >
+              {parts.map((part) => (
+                <option key={part.partNo} value={part.partNo}>
+                  P{part.partNo}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1.5">
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Stage</span>
+            <select
+              value={updateStage}
+              onChange={(event) => setUpdateStage(event.target.value)}
+              aria-label="Stage"
+              className={control}
+            >
+              {stageSlots.map((slot) => (
+                <option key={slot.label}>{slot.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
         {chosenPart ? (
           <PlanDates
             promo={promo}
@@ -108,14 +119,27 @@ export function PromoPlan({
   }
 
   if (embedded) {
+    const headers = lane === "asset" ? ["Assets"] : ["Rough cut", "Final cut", "Sound"];
+    const columns = `3.25rem repeat(${headers.length}, minmax(0, 1fr)) 6.5rem`;
     return (
-      <div className="space-y-1">
-        <p className="text-[11px] leading-4 text-slate-500">
+      <div className="space-y-3">
+        <p className="text-[12px] text-slate-500">
           {mode === "update"
-            ? "The planned date stays on the left of each field. If it slipped, set the new date and a short reason."
+            ? "Plotted date sits above the field. If it slipped, set the new date and a short reason."
             : "One date per stage, then Record."}
         </p>
-        <div className="divide-y divide-white/[0.06] overflow-hidden rounded-lg border border-white/[0.08]">
+        <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
+          <div>
+            <div
+              className="grid items-center gap-3 border-b border-white/[0.06] px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500"
+              style={{ gridTemplateColumns: columns }}
+            >
+              <span>Part</span>
+              {headers.map((header) => (
+                <span key={header}>{header}</span>
+              ))}
+              <span />
+            </div>
           {lane !== "animation" && (
             <PlanDates
               promo={promo}
@@ -133,6 +157,7 @@ export function PromoPlan({
                 { label: "Final cut", match: "final cut|second cut|correction close", enabled: false },
                 { label: "Sound", match: "sound", enabled: false },
               ]}
+              columns={columns}
             />
           )}
           {lane !== "asset" &&
@@ -154,8 +179,10 @@ export function PromoPlan({
                   { label: "Final cut", match: "final cut|second cut|correction close", enabled: true },
                   { label: "Sound", match: "sound", enabled: true },
                 ]}
+                columns={columns}
               />
             ))}
+          </div>
         </div>
       </div>
     );
@@ -272,6 +299,7 @@ function PlanDates({
   plannedHint = null,
   rowLabel = "",
   slots,
+  columns = "",
 }: {
   promo: Promo;
   partNo: number;
@@ -283,6 +311,8 @@ function PlanDates({
   plannedHint?: string | null;
   rowLabel?: string;
   slots: { label: string; match: string; enabled: boolean }[];
+  /** Shared with the column header so every part row lines up. */
+  columns?: string;
 }) {
   const { act } = useOps();
   const [error, setError] = useState<string | null>(null);
@@ -350,28 +380,36 @@ function PlanDates({
 
   if (embedded) {
     const shown = slots.filter((slot) => slot.enabled);
-    const field = "h-7 rounded border border-white/[0.1] bg-[#0e0e13] px-1.5 text-[12px] text-white";
-    const shell = rowLabel
-      ? "flex flex-wrap items-center gap-1.5 px-2 py-1"
-      : "contents";
+    const field =
+      "h-9 w-full min-w-0 rounded-lg border border-white/[0.12] bg-[#222738] px-2.5 text-[13px] text-white";
+    const grid = columns || `repeat(${shown.length}, minmax(0, 1fr)) 6.5rem`;
     return (
-      <div className={shell}>
-        {rowLabel && <span className="w-10 shrink-0 text-[12px] font-semibold text-white">{rowLabel}</span>}
+      <div
+        className="grid items-start gap-3 border-t border-white/[0.06] px-3 py-3"
+        style={{ gridTemplateColumns: grid }}
+      >
+        {rowLabel && (
+          <span className="flex h-9 items-center text-[13px] font-semibold text-white">{rowLabel}</span>
+        )}
         {shown.map((slot) => {
           const planned = formatDmy(fromSheet[slot.label]?.date || plannedHint);
           return (
-            <div key={slot.label} className="flex items-center gap-1.5">
-              {shown.length > 1 && <span className="text-[11px] text-slate-400">{slot.label}</span>}
+            <div key={slot.label} className="min-w-0 space-y-1.5">
+              {!rowLabel && (
+                <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  {slot.label}
+                </span>
+              )}
               {!open ? (
-                <span className="text-[12px] text-slate-200">
+                <span className="flex h-9 items-center text-[13px] text-slate-200">
                   {formatDmy(savedDates[slot.label]) || "—"}
                   {times[slot.label] ? ` · ${slotLabel(times[slot.label] ?? "") ?? ""}` : ""}
                 </span>
               ) : (
                 <>
                   {askDelay && (
-                    <span className="text-[11px] text-slate-500" title="Planned and plotted date on the Production Tracker">
-                      Plot {planned}
+                    <span className="block text-[11px] text-slate-400" title="Planned and plotted date on the Production Tracker">
+                      Plotted {planned || "—"}
                     </span>
                   )}
                   <input
@@ -379,7 +417,7 @@ function PlanDates({
                     aria-label={askDelay ? `${slot.label} update date` : `${slot.label} date`}
                     value={draft[slot.label] ?? ""}
                     onChange={(e) => setDraft((d) => ({ ...d, [slot.label]: e.target.value }))}
-                    className={`${field} w-[8.6rem]`}
+                    className={field}
                   />
                   {askDelay && (
                     <input
@@ -387,44 +425,49 @@ function PlanDates({
                       onChange={(e) => setReasons((current) => ({ ...current, [slot.label]: e.target.value }))}
                       placeholder="Reason"
                       aria-label={`${slot.label} delay reason`}
-                      className={`${field} w-28 placeholder:text-slate-500`}
+                      className={`${field} placeholder:text-slate-500`}
                     />
                   )}
-                  {showTimes &&
-                    TIMES.map((time) => (
-                      <button
-                        key={time}
-                        type="button"
-                        disabled={!draft[slot.label]}
-                        onClick={() =>
-                          setTimes((current) => ({
-                            ...current,
-                            [slot.label]: current[slot.label] === time ? null : time,
-                          }))
-                        }
-                        className={`h-7 rounded px-1.5 text-[10px] font-bold ${
-                          times[slot.label] === time ? "bg-[#4361ee] text-white" : "bg-white/[0.06] text-slate-400"
-                        } disabled:opacity-40`}
-                      >
-                        {slotLabel(time) ?? time}
-                      </button>
-                    ))}
+                  {showTimes && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {TIMES.map((time) => (
+                        <button
+                          key={time}
+                          type="button"
+                          disabled={!draft[slot.label]}
+                          onClick={() =>
+                            setTimes((current) => ({
+                              ...current,
+                              [slot.label]: current[slot.label] === time ? null : time,
+                            }))
+                          }
+                          className={`h-8 rounded-lg px-2.5 text-[11px] font-bold ${
+                            times[slot.label] === time ? "bg-[#4361ee] text-white" : "bg-white/[0.06] text-slate-300"
+                          } disabled:opacity-40`}
+                        >
+                          {slotLabel(time) ?? time}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
             </div>
           );
         })}
-        {open && (
-          <button
-            type="button"
-            disabled={!dirty}
-            onClick={record}
-            className="h-7 rounded bg-[#4361ee] px-2.5 text-[11px] font-bold text-white disabled:opacity-40"
-          >
-            Record
-          </button>
-        )}
-        {error && <p className="text-[11px] text-rose-300">{error}</p>}
+        <div>
+          {open && (
+            <button
+              type="button"
+              disabled={!dirty}
+              onClick={record}
+              className="h-9 w-full rounded-lg bg-[#4361ee] text-[12px] font-bold text-white disabled:opacity-40"
+            >
+              Record
+            </button>
+          )}
+          {error && <p className="mt-1 text-[11px] text-rose-300">{error}</p>}
+        </div>
       </div>
     );
   }

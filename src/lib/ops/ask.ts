@@ -520,7 +520,7 @@ function powerStartFacts(snap: OpsSnapshot, promo: Promo): string[] {
   if (!row) return [`The Duration tab has no row for ${title}.`];
   if (row.powerStarts.length === 0) {
     return [
-      `${title} has no power starts. None of the PS columns on the Duration tab are filled. Total duration is ${formatClock(row.totalSec)}.`,
+      `No power start is filled for ${title}. Total duration is ${formatClock(row.totalSec)}.`,
     ];
   }
   const each = row.powerStarts
@@ -536,7 +536,11 @@ function powerStartFacts(snap: OpsSnapshot, promo: Promo): string[] {
   ];
 }
 
-function answerPromo(snap: OpsSnapshot, promo: Promo): string[] {
+function wantsPowerStart(question: string): boolean {
+  return /\bpower\s*starts?\b/i.test(question);
+}
+
+function answerPromo(snap: OpsSnapshot, promo: Promo, question = ""): string[] {
   const base = promo.id.split("#")[0];
   const parts = snap.parts
     .filter((part) => part.promoId === base || part.promoId.split("#")[0] === base)
@@ -547,14 +551,15 @@ function answerPromo(snap: OpsSnapshot, promo: Promo): string[] {
     return [
       `${title} has no production parts yet.`,
       status ? `Pre-production status is ${status}.` : "It is not on the production tracker.",
-      ...powerStartFacts(snap, promo),
+      ...(wantsPowerStart(question) ? powerStartFacts(snap, promo) : []),
     ];
   }
   const open = parts.filter((part) => part.stage !== "delivered");
   if (open.length === 0) {
     return [
-      `${title} is closed on the production sheet. All ${parts.length} parts are Delivered.`,
-      ...powerStartFacts(snap, promo),
+      `${title} is closed. All ${parts.length} parts are delivered.`,
+      ...whoAndDuration(snap, promo, parts),
+      ...(wantsPowerStart(question) ? powerStartFacts(snap, promo) : []),
     ];
   }
 
@@ -598,9 +603,20 @@ function answerPromo(snap: OpsSnapshot, promo: Promo): string[] {
     );
   }
   const remain = open.reduce((sum, part) => sum + (part.durationSec || 0), 0);
-  if (remain > 0) lines.push(`Open parts still add up to ${formatDuration(remain)} of duration.`);
-  lines.push(...powerStartFacts(snap, promo));
+  if (remain > 0) lines.push(`Open parts still add up to ${formatDuration(remain)}.`);
+  lines.push(...whoAndDuration(snap, promo, parts));
+  if (wantsPowerStart(question)) lines.push(...powerStartFacts(snap, promo));
   lines.push(...sheetFacts(snap, promo));
+  return lines;
+}
+
+/** Artists on the parts, and the Duration tab total. Power start is left out unless asked. */
+function whoAndDuration(snap: OpsSnapshot, promo: Promo, parts: Part[]): string[] {
+  const lines: string[] = [];
+  const artists = [...new Set(parts.map((part) => part.artist?.trim()).filter((name): name is string => !!name))];
+  if (artists.length) lines.push(`Worked on it: ${artists.join(", ")}.`);
+  const row = findDuration(snap, promo.id);
+  if (row?.totalSec != null && row.totalSec > 0) lines.push(`Total duration ${formatClock(row.totalSec)}.`);
   return lines;
 }
 
@@ -638,7 +654,7 @@ const SHEET_GUIDE = [
   "Pre Production Tracker: the asset plan, status, artist, and start date.",
   "Promos - Assets Master Sheet: the asset team's own status. The calendar keeps a promo only when this is WIP.",
   "Master Productivity: CPS rating and written feedback. This is separate from how many minutes someone worked.",
-  "Animation productivity, Master data: one row per artist per day, with minutes and a remark. That file is not shared yet, so those minutes are empty.",
+  "Animation productivity, Master data: one row per artist per day. Date, artist, show, promo, parts worked, and duration worked that day (under 3 min, 3-5 min, or correction).",
   "Dashverse Master Sheet: canvas, delivery files, script links, cost, and payment.",
   "Planner tab: the revised date, and first half, second half, or EOD.",
   "Remarks tab: every time a plan is recorded, kept as its own row.",
@@ -734,7 +750,7 @@ function rankedChoices(snap: OpsSnapshot, question: string): { score: number; ch
   return found.sort((a, b) => b.score - a.score || a.choice.label.localeCompare(b.choice.label));
 }
 
-function replyFor(snap: OpsSnapshot, choice: AskChoice): AskReply {
+function replyFor(snap: OpsSnapshot, choice: AskChoice, question = ""): AskReply {
   if (choice.kind === "person") {
     const tables = [personWorkTable(snap, choice.id), personFeedbackTable(snap, choice.id)].filter(
       (table) => table.rows.length > 0
@@ -752,7 +768,7 @@ function replyFor(snap: OpsSnapshot, choice: AskChoice): AskReply {
   const table = promoWorkTable(snap, promo);
   return {
     heading: promo.showName || choice.label,
-    lines: answerPromo(snap, promo),
+    lines: answerPromo(snap, promo, question),
     table: table.rows.length ? table : undefined,
     focus: choice,
   };
@@ -764,7 +780,7 @@ export function answerOps(snap: OpsSnapshot, question: string, pick?: AskChoice,
   if (!asked && !pick) {
     return { heading: "Ask about the sheets", lines: ["Name an artist or a show."] };
   }
-  if (pick) return replyFor(snap, pick);
+  if (pick) return replyFor(snap, pick, asked);
   const ranked = rankedChoices(snap, asked);
   const best = ranked[0];
   const general = /\bwho is free|what is open|which sheet|past their plotted|what do you (read|use)|available|on leave|who is working\b/i.test(
@@ -830,7 +846,7 @@ export function answerOps(snap: OpsSnapshot, question: string, pick?: AskChoice,
   const followUp = /\b(their|they|them|that|this|same|also|too|again|her|his|its|it's|what about|how about|power\s*starts?|\bps\b|duration|which days|worked days)\b/i.test(
     asked
   );
-  if ((!best || best.score < 70) && follow && followUp && !general) return replyFor(snap, follow);
+  if ((!best || best.score < 70) && follow && followUp && !general) return replyFor(snap, follow, asked);
   if (!best) {
     if (/\bsheet|spreadsheet|which tab|where .*(from|stored|saved)|what do you (read|use)|source\b/i.test(asked)) {
       return { heading: "Sheets I use", lines: SHEET_GUIDE };
@@ -839,7 +855,7 @@ export function answerOps(snap: OpsSnapshot, question: string, pick?: AskChoice,
   }
   const close = ranked.filter((item) => item.score >= best.score - 12);
   const exact = close.filter((item) => item.score >= 100);
-  if (exact.length === 1) return replyFor(snap, exact[0].choice);
+  if (exact.length === 1) return replyFor(snap, exact[0].choice, asked);
   return {
     heading: "Which one?",
     lines: [

@@ -23,12 +23,11 @@ export async function POST(request: Request) {
     .map((turn, index) => `Turn ${index + 1}\nQuestion: ${turn.question}\nAnswer: ${turn.answer}`)
     .join("\n\n");
   const prompt = [
-    "You are the PocketFM ops assistant. The user can ask follow-up questions about the same promo or person.",
-    "Use only the facts below. Do not invent dates, ratings, names, minutes, or reasons. If a fact is missing, say it is missing rather than guessing.",
-    "Write for someone with zero context — a third person who has never seen this dashboard or these sheets should be able to read your answer alone and fully understand what happened, who is involved, what the numbers mean, and why it matters. Spell out names, show/promo titles, and what each number represents instead of assuming the reader already knows.",
-    "Be thorough and specific: include the concrete numbers, dates, and names from the facts rather than vague summaries like 'performance is good'. When several parts share one date, say that once instead of repeating it.",
-    "The page also shows a table with the same part/artist/plot/productivity/quality rows — you can reference it briefly, but do not use it as an excuse to skip detail; put the important numbers in your prose too.",
-    "Write four to seven plain, complete sentences. Prefer being a little longer and clearer over being terse.",
+    "You pass information to people who already run this work. They know the sheets, the stages, and the process. Do not explain any of that.",
+    "Use only the facts below. Do not invent dates, names, ratings, or durations.",
+    "Answer the question in one to three short sentences. Lead with the fact: the date, the names, or the duration.",
+    "Do not mention anything that is empty, missing, or not filled in, unless the question asks whether it is missing.",
+    "Do not mention power start unless the question asks about power start. Power start is optional and is not part of a normal answer.",
     "",
     earlier ? `Earlier in this conversation:\n${earlier}` : "",
     `Latest question: ${question}`,
@@ -48,7 +47,7 @@ export async function POST(request: Request) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 768 },
+          generationConfig: { temperature: 0.2, maxOutputTokens: 320 },
         }),
       }
     );

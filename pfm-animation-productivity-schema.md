@@ -2,7 +2,7 @@
 
 Captured 2026-10-27. **Separate spreadsheet** from `PFM_dashboard_Timeline`. Raw day-by-day log for the **throughput** half of productivity (quality lives in `pfm-master-productivity-schema.md`).
 
-- Spreadsheet: https://docs.google.com/spreadsheets/d/1U6fvzf9Fe9ydjCP-lbNoQFjklaPt62-ESxG8Ummh7-s
+- Spreadsheet: https://docs.google.com/spreadsheets/d/1U6fvzf9Fe9ydjCP-IbNoQFjklaPt62-ESxG8Ummh7-s
 - Spreadsheet name: **Animation productivity**
 - Tab: **Master data** (`gid=0`)
 - Other tabs: `Drop downs`, `Promo names`, `Sheet4`

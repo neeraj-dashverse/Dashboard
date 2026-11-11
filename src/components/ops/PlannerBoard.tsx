@@ -225,7 +225,7 @@ export function PlannerBoard() {
           <button
             type="button"
             onClick={() => setShift((s) => s - 7)}
-            className="rounded-md bg-white/[0.05] px-2.5 py-1.5 text-[13px] font-bold text-slate-300 hover:text-white"
+            className="h-9 rounded-lg bg-white/[0.05] px-3 text-[13px] font-bold text-slate-300 hover:text-white"
           >
             ←
           </button>
@@ -235,14 +235,14 @@ export function PlannerBoard() {
               pendingToday.current = true;
               setShift(0);
             }}
-            className="rounded-md bg-white/[0.05] px-2.5 py-1.5 text-[12px] font-semibold text-slate-300 hover:text-white"
+            className="h-9 rounded-lg bg-white/[0.05] px-3 text-[12px] font-semibold text-slate-300 hover:text-white"
           >
             Today
           </button>
           <button
             type="button"
             onClick={() => setShift((s) => s + 7)}
-            className="rounded-md bg-white/[0.05] px-2.5 py-1.5 text-[13px] font-bold text-slate-300 hover:text-white"
+            className="h-9 rounded-lg bg-white/[0.05] px-3 text-[13px] font-bold text-slate-300 hover:text-white"
           >
             →
           </button>
@@ -252,7 +252,7 @@ export function PlannerBoard() {
               key={mode}
               type="button"
               onClick={() => openSheet(mode)}
-              className={`rounded-md px-3 py-1.5 text-[12px] font-bold ${
+              className={`h-9 rounded-lg px-4 text-[12px] font-bold ${
                 sheetMode === mode ? "bg-[#4361ee] text-white" : "bg-white/[0.05] text-slate-300 hover:text-white"
               }`}
             >
@@ -264,25 +264,25 @@ export function PlannerBoard() {
 
 
       {sheetMode && (
-        <section className="space-y-2 rounded-xl border border-white/[0.12] bg-[#161a26] px-3 py-2">
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="space-y-1 text-[11px] font-semibold text-slate-400">
-              <span className="block">Which work</span>
+        <section className="space-y-4 rounded-xl border border-white/[0.08] bg-[#161a26] p-4">
+          <div className="grid items-end gap-3 sm:grid-cols-[11rem_minmax(0,1fr)]">
+            <label className="space-y-1.5">
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Which work</span>
               <select
                 value={lane}
                 onChange={(event) => setLane(event.target.value as "asset" | "animation")}
-                className="rounded-md border border-white/[0.12] bg-[#222738] px-2 py-1.5 text-[13px] text-white"
+                className="h-9 w-full rounded-lg border border-white/[0.12] bg-[#222738] px-3 text-[13px] text-white"
               >
                 <option value="asset">Asset</option>
                 <option value="animation">Animation</option>
               </select>
             </label>
-            <label className="min-w-[220px] flex-1 space-y-1 text-[11px] font-semibold text-slate-400">
-              <span className="block">Promo</span>
+            <label className="space-y-1.5">
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Promo</span>
               <select
                 value={promoId}
                 onChange={(event) => setPromoId(event.target.value)}
-                className="w-full rounded-md border border-white/[0.12] bg-[#222738] px-2 py-1.5 text-[13px] text-white"
+                className="h-9 w-full rounded-lg border border-white/[0.12] bg-[#222738] px-3 text-[13px] text-white"
               >
                 <option value="">Choose a promo</option>
                 {sheetPromos.map((promo) => (

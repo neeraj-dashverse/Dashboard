@@ -136,10 +136,6 @@ export function RecordDetail({ promoId }: { promoId: string }) {
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
         <Stat label="Duration" value={formatClock(sheetDuration?.totalSec)} />
         <Stat label="With CTA" value={formatClock(sheetDuration?.workedWithCtaSec)} />
-        <Stat
-          label="Power starts"
-          value={sheetDuration ? String(sheetDuration.powerStarts.length) : "—"}
-        />
         <Stat label="Total worked" value={duration(workedTotal) || "—"} />
         <Stat label="Pre-production start" value={assetStart || "—"} />
         <Stat label="Pre-production end" value={assetEnd || "—"} />
@@ -153,14 +149,6 @@ export function RecordDetail({ promoId }: { promoId: string }) {
           value={asset?.totalDays != null ? `${asset.totalDays} days` : pre?.status || "—"}
         />
       </div>
-      {sheetDuration && sheetDuration.powerStarts.length > 0 && (
-        <p className="text-[12px] text-slate-300">
-          {sheetDuration.powerStarts
-            .map((start) => `${start.label} ${start.lengthSec == null ? "—" : `${start.lengthSec}s`}`)
-            .join(" · ")}
-        </p>
-      )}
-
       <div className="grid gap-2 sm:grid-cols-2">
         <FileLink label="Final render" href={promo?.finalRendersLink} />
         <FileLink label="Project files" href={promo?.projectFilesLink} />
