@@ -8,7 +8,10 @@ import {
   promoFor,
   qualityForAnimator,
 } from "@/lib/ops/selectors";
+import { DURATION_WORKED_BUCKETS } from "@/lib/ops/sheet-registry";
 import type { QualityReview } from "@/lib/ops/types";
+
+const DURATION_BUCKET_ORDER = ["<3", "3-5", "5-7", ">7"] as const;
 import { Kpi } from "./ui";
 import { useOps } from "./OpsProvider";
 
@@ -21,26 +24,31 @@ function worked(seconds: number): string {
 
 const TREND_ARROW: Record<string, string> = { up: "↑", down: "↓", flat: "→" };
 
+const RANGE_TONE: Record<string, string> = {
+  "<3": "text-amber-300",
+  "3-5": "text-slate-300",
+  "5-7": "text-emerald-300",
+  ">7": "text-emerald-400",
+};
+
 /** Reads the Duration worked/day bucket into a short "3-5 min ↑" style badge for the Min/day column. */
 function RangeBadge({ name, snap }: { name: string; snap: Parameters<typeof durationProfile>[0] }) {
   const profile = durationProfile(snap, name);
   if (!profile.typicalRange) return null;
-  const tone =
-    profile.typicalRange === "3-5 min"
-      ? "text-emerald-300"
-      : profile.typicalRange === "<3 min"
-        ? "text-amber-300"
-        : "text-slate-400";
-  const title = `${profile.threeToFive} day(s) at 3-5 min, ${profile.under3} day(s) under 3 min (excludes ${profile.corrections} correction day(s)).${
+  const bucket = DURATION_WORKED_BUCKETS[profile.typicalRange];
+  const counts = DURATION_BUCKET_ORDER.filter((key) => profile.counts[key] > 0)
+    .map((key) => `${profile.counts[key]} at ${DURATION_WORKED_BUCKETS[key].label.toLowerCase()}`)
+    .join(", ");
+  const title = `Mostly ${bucket.label.toLowerCase()} (${bucket.tier}). ${counts} (excludes ${profile.corrections} correction day(s)).${
     profile.trend === "up"
-      ? " Trending up — more recent days are in the bigger range."
+      ? " Trending up — recent days are in a more productive range."
       : profile.trend === "down"
-        ? " Trending down — more recent days are in the smaller range."
+        ? " Trending down — recent days are in a less productive range."
         : ""
   }`;
   return (
-    <span title={title} className={`mt-0.5 block text-[10px] font-semibold ${tone}`}>
-      {profile.typicalRange === "mixed" ? "Mixed" : profile.typicalRange}
+    <span title={title} className={`mt-0.5 block text-[10px] font-semibold ${RANGE_TONE[profile.typicalRange]}`}>
+      {bucket.label}
       {profile.trend && profile.trend !== "flat" ? ` ${TREND_ARROW[profile.trend]}` : ""}
     </span>
   );

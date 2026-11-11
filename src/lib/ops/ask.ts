@@ -15,7 +15,27 @@ import {
   qualityForEditor,
   STAGE_LABEL,
   teamGroups,
+  type DurationProfile,
 } from "./selectors";
+import { DURATION_WORKED_BUCKETS } from "./sheet-registry";
+
+const DURATION_BUCKET_ORDER = ["<3", "3-5", "5-7", ">7"] as const;
+
+/** "5 day(s) at 3 - 5 min, 2 at 5 - 7 min" — only buckets with at least one day. */
+function durationCountsLine(profile: DurationProfile): string {
+  return DURATION_BUCKET_ORDER.filter((bucket) => profile.counts[bucket] > 0)
+    .map((bucket) => `${profile.counts[bucket]} at ${DURATION_WORKED_BUCKETS[bucket].label.toLowerCase()}`)
+    .join(", ");
+}
+
+/** The mode bucket as a plain sentence — a count, not a fraction (per Neeraj: "no need of fractions"). */
+function typicalRangeLine(profile: DurationProfile): string {
+  if (!profile.typicalRange) return "No Duration worked/day data yet.";
+  const tier = DURATION_WORKED_BUCKETS[profile.typicalRange].tier;
+  return `Mostly logs ${DURATION_WORKED_BUCKETS[profile.typicalRange].label.toLowerCase()} (${tier}). ${durationCountsLine(
+    profile
+  )}.`;
+}
 
 export type AskChoice = {
   kind: "person" | "promo";
@@ -476,19 +496,14 @@ function productivityLines(snap: OpsSnapshot, name: string): string[] {
   }
   const profile = durationProfile(snap, name);
   if (profile.totalRangedDays > 0) {
-    const pct = profile.highShare != null ? Math.round(profile.highShare * 100) : 0;
     const trendText =
       profile.trend === "up"
-        ? " They have been trending up — more recent days land in the bigger 3-5 min range than their earlier days."
+        ? " Trending up — recent days have moved to a more productive range than earlier days."
         : profile.trend === "down"
-          ? " They have been trending down — more recent days land in the smaller under-3-min range than their earlier days."
-          : profile.trend === "flat"
-            ? " This has stayed steady over time."
-            : "";
+          ? " Trending down — recent days have moved to a less productive range than earlier days."
+          : "";
     lines.push(
-      `Duration worked/day (excluding correction days): ${profile.threeToFive} day${profile.threeToFive === 1 ? "" : "s"} at 3-5 min, ${profile.under3} day${profile.under3 === 1 ? "" : "s"} under 3 min (${pct}% in the bigger range).${
-        profile.typicalRange ? ` Typically delivers ${profile.typicalRange} a day.` : ""
-      }${trendText}`
+      `${typicalRangeLine(profile)}${trendText}`
     );
   }
   return lines;
@@ -654,7 +669,7 @@ const SHEET_GUIDE = [
   "Pre Production Tracker: the asset plan, status, artist, and start date.",
   "Promos - Assets Master Sheet: the asset team's own status. The calendar keeps a promo only when this is WIP.",
   "Master Productivity: CPS rating and written feedback. This is separate from how many minutes someone worked.",
-  "Animation productivity, Master data: one row per artist per day. Date, artist, show, promo, parts worked, and duration worked that day (under 3 min, 3-5 min, or correction).",
+  "Animation productivity, Master data: one row per artist per day. Date, artist, show, promo, parts worked, and duration worked that day — under 3 min (low), 3-5 min (avg), 5-7 min (high), more than 7 min (highly productive), or correction (ignored).",
   "Dashverse Master Sheet: canvas, delivery files, script links, cost, and payment.",
   "Planner tab: the revised date, and first half, second half, or EOD.",
   "Remarks tab: every time a plan is recorded, kept as its own row.",
@@ -812,22 +827,24 @@ export function answerOps(snap: OpsSnapshot, question: string, pick?: AskChoice,
     const ranked = durationRanking(snap).slice(0, 15);
     const rows = ranked.map((row) => [
       row.name,
-      `${row.threeToFive}`,
-      `${row.under3}`,
-      row.highShare != null ? `${Math.round(row.highShare * 100)}%` : "—",
-      row.typicalRange ?? "—",
+      row.typicalRange ? `${DURATION_WORKED_BUCKETS[row.typicalRange].label} (${DURATION_WORKED_BUCKETS[row.typicalRange].tier})` : "—",
+      ...DURATION_BUCKET_ORDER.map((bucket) => `${row.counts[bucket]}`),
     ]);
     const top = ranked.slice(0, 5).map((row) => row.name);
     return {
       heading: "Duration worked/day, ranked",
       lines: [
         "From the Animation productivity sheet's Duration worked/day column. Correction days are excluded.",
-        top.length
-          ? `Most often in the bigger 3-5 min range: ${top.join(", ")}.`
-          : "Not enough daily rows yet to rank anyone.",
+        top.length ? `Most productive range overall: ${top.join(", ")}.` : "Not enough daily rows yet to rank anyone.",
       ],
       tables: rows.length
-        ? [{ title: "Duration range by artist", columns: ["Artist", "3-5 min days", "<3 min days", "In 3-5 min", "Typical"], rows }]
+        ? [
+            {
+              title: "Duration range by artist",
+              columns: ["Artist", "Typical", "<3 min", "3-5 min", "5-7 min", ">7 min"],
+              rows,
+            },
+          ]
         : undefined,
     };
   }

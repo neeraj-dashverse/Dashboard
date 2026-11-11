@@ -9,6 +9,10 @@ import type {
   QualityReview,
   Stage,
 } from "./types";
+import { DURATION_WORKED_BUCKETS } from "./sheet-registry";
+
+type DurationBucketKey = "<3" | "3-5" | "5-7" | ">7";
+const DURATION_BUCKET_ORDER: DurationBucketKey[] = ["<3", "3-5", "5-7", ">7"];
 
 function addDaysIso(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -687,25 +691,36 @@ export function animatorProductivity(snap: OpsSnapshot): AnimatorProductivity[] 
 
 export type DurationProfile = {
   name: string;
-  /** Days logged "Less than 3 min". */
-  under3: number;
-  /** Days logged "3 - 5 min". */
-  threeToFive: number;
+  /** Count of ranged (non-correction) days in each bucket, low to high. */
+  counts: Record<DurationBucketKey, number>;
   /** Correction-only days — excluded from the range read, kept for context. */
   corrections: number;
-  /** under3 + threeToFive. Corrections do not count toward a work-range read. */
+  /** Sum of counts. Corrections do not count toward a work-range read. */
   totalRangedDays: number;
-  /** Share of ranged days in the bigger (3-5 min) bucket, 0–1. Higher = delivers more duration per day. */
-  highShare: number | null;
-  /** "3-5 min", "<3 min", or "mixed" when it is close to even. null with too little data. */
-  typicalRange: "<3 min" | "3-5 min" | "mixed" | null;
   /**
-   * Earlier half vs. later half of their logged days, by the 3-5 min share.
-   * "up" = moved toward the bigger range over time, "down" = moved toward the smaller range.
-   * null when there are too few days to compare.
+   * The bucket with the most logged days. This is a mode, not an average — "it depends on how
+   * many records they are doing and which is more" (per Neeraj). Ties favor the higher bucket.
+   * null with no ranged days.
+   */
+  typicalRange: DurationBucketKey | null;
+  /**
+   * Earlier half vs. later half of their logged days, compared by which bucket is most common in
+   * each half. "up" = moved to a more productive bucket over time, "down" = moved to a less
+   * productive one. null when there are too few days to compare.
    */
   trend: "up" | "down" | "flat" | null;
 };
+
+function modeBucket(rows: { durationBucket: DurationBucketKey }[]): DurationBucketKey | null {
+  if (rows.length === 0) return null;
+  const counts: Record<DurationBucketKey, number> = { "<3": 0, "3-5": 0, "5-7": 0, ">7": 0 };
+  for (const row of rows) counts[row.durationBucket]++;
+  let best: DurationBucketKey = "<3";
+  for (const bucket of DURATION_BUCKET_ORDER) {
+    if (counts[bucket] >= counts[best]) best = bucket; // ties favor the higher (later) bucket
+  }
+  return best;
+}
 
 /**
  * Animation productivity · Master data, Duration worked/day column, per artist.
@@ -716,50 +731,50 @@ export type DurationProfile = {
 export function durationProfile(snap: OpsSnapshot, name: string): DurationProfile {
   const key = personKey(name);
   const ranged = snap.dailyLogs
-    .filter((log) => personKey(log.artist) === key && log.workType === "new" && log.durationBucket != null)
+    .filter(
+      (log): log is typeof log & { durationBucket: DurationBucketKey } =>
+        personKey(log.artist) === key && log.workType === "new" && log.durationBucket != null
+    )
     .sort((a, b) => a.date.localeCompare(b.date));
-  const under3 = ranged.filter((log) => log.durationBucket === "<3").length;
-  const threeToFive = ranged.filter((log) => log.durationBucket === "3-5").length;
+  const counts: Record<DurationBucketKey, number> = { "<3": 0, "3-5": 0, "5-7": 0, ">7": 0 };
+  for (const row of ranged) counts[row.durationBucket]++;
   const corrections = snap.dailyLogs.filter(
     (log) => personKey(log.artist) === key && log.workType === "correction"
   ).length;
-  const totalRangedDays = under3 + threeToFive;
-  const highShare = totalRangedDays > 0 ? Math.round((threeToFive / totalRangedDays) * 100) / 100 : null;
-  const typicalRange =
-    totalRangedDays < 2 || highShare == null
-      ? null
-      : highShare >= 0.6
-        ? "3-5 min"
-        : highShare <= 0.4
-          ? "<3 min"
-          : "mixed";
+  const totalRangedDays = ranged.length;
+  const typicalRange = modeBucket(ranged);
 
   let trend: DurationProfile["trend"] = null;
   if (totalRangedDays >= 4) {
     const mid = Math.floor(ranged.length / 2);
-    const share = (rows: typeof ranged) =>
-      rows.length ? rows.filter((log) => log.durationBucket === "3-5").length / rows.length : null;
-    const early = share(ranged.slice(0, mid));
-    const late = share(ranged.slice(mid));
+    const early = modeBucket(ranged.slice(0, mid));
+    const late = modeBucket(ranged.slice(mid));
     if (early != null && late != null) {
-      const delta = late - early;
-      trend = delta >= 0.15 ? "up" : delta <= -0.15 ? "down" : "flat";
+      const delta = DURATION_WORKED_BUCKETS[late].level - DURATION_WORKED_BUCKETS[early].level;
+      trend = delta > 0 ? "up" : delta < 0 ? "down" : "flat";
     }
   }
-  return { name, under3, threeToFive, corrections, totalRangedDays, highShare, typicalRange, trend };
+  return { name, counts, corrections, totalRangedDays, typicalRange, trend };
 }
 
-/** Every artist with a daily log, ranked by who most often delivers the bigger 3-5 min range. */
+/** Every artist with a daily log, ranked by who most often delivers the more productive buckets. */
 export function durationRanking(snap: OpsSnapshot): DurationProfile[] {
   const names = new Set<string>();
   for (const log of snap.dailyLogs) {
     const trimmed = log.artist.trim();
     if (trimmed) names.add(trimmed);
   }
+  const avgLevel = (profile: DurationProfile) =>
+    profile.totalRangedDays > 0
+      ? DURATION_BUCKET_ORDER.reduce(
+          (sum, bucket) => sum + profile.counts[bucket] * DURATION_WORKED_BUCKETS[bucket].level,
+          0
+        ) / profile.totalRangedDays
+      : 0;
   return [...names]
     .map((name) => durationProfile(snap, name))
     .filter((profile) => profile.totalRangedDays > 0)
-    .sort((a, b) => (b.highShare ?? 0) - (a.highShare ?? 0) || b.totalRangedDays - a.totalRangedDays);
+    .sort((a, b) => avgLevel(b) - avgLevel(a) || b.totalRangedDays - a.totalRangedDays);
 }
 
 /** Quality reviews naming this person as editor. */

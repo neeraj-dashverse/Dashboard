@@ -436,11 +436,13 @@ function dailyDate(raw: string): string | null {
 
 function durationKind(raw: string): {
   workType: "new" | "correction";
-  durationBucket: "<3" | "3-5" | null;
+  durationBucket: "<3" | "3-5" | "5-7" | ">7" | null;
   outputMinutes: number;
 } {
   const value = raw.toLowerCase();
   if (/correction/.test(value)) return { workType: "correction", durationBucket: null, outputMinutes: 0 };
+  if (/more|>\s*7|7\s*\+/.test(value)) return { workType: "new", durationBucket: ">7", outputMinutes: 8 };
+  if (/5\s*[-–]\s*7/.test(value)) return { workType: "new", durationBucket: "5-7", outputMinutes: 6 };
   if (/3\s*[-–]\s*5/.test(value)) return { workType: "new", durationBucket: "3-5", outputMinutes: 4 };
   if (/less|<\s*3/.test(value)) return { workType: "new", durationBucket: "<3", outputMinutes: 1.5 };
   return { workType: "new", durationBucket: null, outputMinutes: 0 };

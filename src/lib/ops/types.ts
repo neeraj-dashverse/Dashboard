@@ -434,7 +434,7 @@ export type DailyThroughputLog = {
    * correction days: durationBucket null, midpointMin 0 — active_days policy open.
    */
   workType: "new" | "correction";
-  durationBucket: "<3" | "3-5" | null;
+  durationBucket: "<3" | "3-5" | "5-7" | ">7" | null;
   /** Midpoint minutes for throughput math (0 for correction until policy set). */
   outputMinutes: number;
   remarks: string | null;

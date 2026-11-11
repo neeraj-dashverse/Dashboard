@@ -83,11 +83,17 @@ export const ANIMATION_PRODUCTIVITY_COLUMNS = [
   { col: "H", key: "remarks", header: "Remarks", role: "read" as const },
 ] as const;
 
-/** Sheet dropdown values for Duration worked/day → modeled fields. */
+/**
+ * Sheet dropdown values for Duration worked/day → modeled fields.
+ * Ordered low to high — `level` is the ordinal rank used for "typical range" and trend reads.
+ * Correction days are excluded from every productivity read (per Neeraj: not a normal day's output).
+ */
 export const DURATION_WORKED_BUCKETS = {
-  "<3": { label: "Less than 3 min", workType: "new" as const, midpointMin: 1.5 },
-  "3-5": { label: "3 - 5 min", workType: "new" as const, midpointMin: 4 },
-  correction: { label: "correction", workType: "correction" as const, midpointMin: 0 },
+  "<3": { label: "Less than 3 min", tier: "Low", workType: "new" as const, midpointMin: 1.5, level: 1 },
+  "3-5": { label: "3 - 5 min", tier: "Avg", workType: "new" as const, midpointMin: 4, level: 2 },
+  "5-7": { label: "5 - 7 min", tier: "High", workType: "new" as const, midpointMin: 6, level: 3 },
+  ">7": { label: "More than 7 min", tier: "Highly productive", workType: "new" as const, midpointMin: 8, level: 4 },
+  correction: { label: "correction", tier: null, workType: "correction" as const, midpointMin: 0, level: 0 },
 } as const;
 
 export const DASHVERSE_PFM_SHEET = {
