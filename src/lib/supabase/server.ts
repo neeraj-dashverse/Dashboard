@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { AUTH_COOKIE_OPTIONS } from "./cookies";
 
 /** Supabase client bound to the current request's cookies — use in Server Components, route handlers. */
 export function createServerSupabase() {
@@ -9,6 +10,7 @@ export function createServerSupabase() {
   if (!url || !key) return null;
 
   return createServerClient(url, key, {
+    cookieOptions: AUTH_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return cookieStore.getAll();

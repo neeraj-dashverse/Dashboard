@@ -1,9 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { answerOps, type AskChoice, type AskReply } from "@/lib/ops/ask";
+import { answerOps, type AskChoice, type AskIntent, type AskReply } from "@/lib/ops/ask";
 import { buildTurnText, downloadThreadReport, downloadTurnReport } from "@/lib/ops/ask-report";
-import { plannerRows, teamGroups } from "@/lib/ops/selectors";
 import { useOps } from "./OpsProvider";
 
 type Turn = {
@@ -21,23 +20,19 @@ export function AskBoard() {
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const nextId = useMemo(() => ({ n: 1 }), []);
   const history = useRef<{ question: string; answer: string }[]>([]);
+  const lastIntent = useRef<AskIntent | null>(null);
 
-  const ideas = useMemo(() => {
-    const person = teamGroups(snap)
-      .find((group) => group.id === "animation")
-      ?.people.find((item) => item.holds.length > 0);
-    const row = plannerRows(snap)[0];
-    const prompts = [
-      person
-        ? `Where is ${person.name} plotted, and what rating and feedback do they have?`
-        : "Who is still plotted in animation?",
-      row
-        ? `When will ${row.promo.showName} close, and how long will it take?`
-        : "What is still open in production?",
-      "Who is free, and who is past their plotted date?",
-    ];
-    return prompts;
-  }, [snap]);
+  const ideas = useMemo(
+    () => [
+      "When will animators be free?",
+      "What is the quick status of current promos?",
+      "When will we be delivering the promos?",
+      "What is the productivity of each artist?",
+      "When can I take new promos?",
+      "What's the avg time to complete 1 promo?",
+    ],
+    []
+  );
 
   async function ask(text: string, pick?: AskChoice, fresh = false) {
     const next = text.trim();
@@ -46,23 +41,35 @@ export function AskBoard() {
     if (fresh) {
       setFocus(null);
       history.current = [];
+      lastIntent.current = null;
     }
     const id = nextId.n++;
     setQuestion("");
     setTurns((current) => [...current, { id, question: next, reply: null, waiting: true }]);
-    const local = answerOps(snap, next, pick, remembered);
+    const local = answerOps(snap, next, pick, remembered, lastIntent.current);
     if (local.focus) setFocus(local.focus);
+    if (local.intent) lastIntent.current = local.intent;
     if (local.choices?.length) {
       setTurns((current) => current.map((turn) => (turn.id === id ? { ...turn, reply: local, waiting: false } : turn)));
       return;
     }
     let lines = local.lines;
     if (!local.choices?.length) {
+      // Serialize tables alongside the lines so the AI can answer questions whose answer lives in a table
+      // (leave days, feedback remarks, per-part dates, productivity counts).
+      const tables = local.tables?.length ? local.tables : local.table ? [local.table] : [];
+      const tableText = tables
+        .map((table) => {
+          const header = [table.title, table.columns.join(" | ")].filter(Boolean).join("\n");
+          return [header, ...table.rows.map((row) => row.join(" | "))].join("\n");
+        })
+        .join("\n\n");
+      const facts = [local.lines.join("\n"), tableText].filter(Boolean).join("\n\n");
       try {
         const res = await fetch("/api/ops/ask", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: next, facts: local.lines.join("\n"), history: history.current.slice(-6) }),
+          body: JSON.stringify({ question: next, facts, history: history.current.slice(-6), intent: local.intent }),
         });
         const data = (await res.json()) as { summary?: string | null };
         if (data.summary) lines = data.summary.split(/\n+/).filter(Boolean);
@@ -227,6 +234,7 @@ export function AskBoard() {
               onClick={() => {
                 setFocus(null);
                 history.current = [];
+                lastIntent.current = null;
                 setQuestion("");
               }}
               className="rounded-full border border-white/[0.12] px-3 py-1.5 text-[12px] font-semibold text-slate-300 hover:text-white"

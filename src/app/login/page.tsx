@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { rememberLoginEmail, readRememberedEmail } from "@/lib/auth/remember-email";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 export default function LoginPage() {
@@ -9,6 +10,8 @@ export default function LoginPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    const saved = readRememberedEmail();
+    if (saved) setEmail(saved);
     const params = new URLSearchParams(window.location.search);
     const callbackError = params.get("error");
     if (callbackError) setError(callbackError);
@@ -28,6 +31,7 @@ export default function LoginPage() {
         options: { emailRedirectTo: redirectTo, shouldCreateUser: true },
       });
       if (sendError) throw sendError;
+      rememberLoginEmail(trimmed);
       setStatus("sent");
     } catch (err) {
       setStatus("error");
@@ -41,7 +45,7 @@ export default function LoginPage() {
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Dashverse</p>
         <h1 className="mt-1 text-xl font-extrabold text-white">PocketFM Ops</h1>
         <p className="mt-2 text-[12px] leading-5 text-slate-400">
-          Enter your email. We&apos;ll send a sign-in link — no password, and you stay signed in after that.
+          Enter your email. We&apos;ll send a sign-in link — this browser remembers the email and keeps you signed in.
         </p>
 
         {status === "sent" ? (

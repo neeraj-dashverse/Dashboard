@@ -10,12 +10,11 @@ import {
 } from "@/lib/ops/selectors";
 import { DURATION_WORKED_BUCKETS } from "@/lib/ops/sheet-registry";
 import type { QualityReview } from "@/lib/ops/types";
-
-const DURATION_BUCKET_ORDER = ["<3", "3-5", "5-7", ">7"] as const;
 import { Kpi } from "./ui";
 import { useOps } from "./OpsProvider";
 
 const RECENT_PROMO_COUNT = 3;
+const DURATION_BUCKET_ORDER = ["<3", "3-5", "5-7", ">7"] as const;
 
 function worked(seconds: number): string {
   if (seconds <= 0) return "—";
@@ -31,10 +30,13 @@ const RANGE_TONE: Record<string, string> = {
   ">7": "text-emerald-400",
 };
 
-/** Reads the Duration worked/day bucket into a short "3-5 min ↑" style badge for the Min/day column. */
+/**
+ * Duration worked/day, read as the bucket they log most often — not an average minutes/day number.
+ * This is the whole content of the Productivity table's "Typical range" column.
+ */
 function RangeBadge({ name, snap }: { name: string; snap: Parameters<typeof durationProfile>[0] }) {
   const profile = durationProfile(snap, name);
-  if (!profile.typicalRange) return null;
+  if (!profile.typicalRange) return <span className="text-slate-500">—</span>;
   const bucket = DURATION_WORKED_BUCKETS[profile.typicalRange];
   const counts = DURATION_BUCKET_ORDER.filter((key) => profile.counts[key] > 0)
     .map((key) => `${profile.counts[key]} at ${DURATION_WORKED_BUCKETS[key].label.toLowerCase()}`)
@@ -47,7 +49,7 @@ function RangeBadge({ name, snap }: { name: string; snap: Parameters<typeof dura
         : ""
   }`;
   return (
-    <span title={title} className={`mt-0.5 block text-[10px] font-semibold ${RANGE_TONE[profile.typicalRange]}`}>
+    <span title={title} className={`text-[12px] font-semibold ${RANGE_TONE[profile.typicalRange]}`}>
       {bucket.label}
       {profile.trend && profile.trend !== "flat" ? ` ${TREND_ARROW[profile.trend]}` : ""}
     </span>
@@ -135,8 +137,8 @@ export function ProductivityBoard() {
               <th className="whitespace-nowrap px-3 py-2.5">Open</th>
               <th className="whitespace-nowrap px-3 py-2.5">Delivered</th>
               <th className="whitespace-nowrap px-3 py-2.5">Worked</th>
-              <th className="whitespace-nowrap px-3 py-2.5" title="Average output minutes per logged day, and their typical Duration worked/day range">
-                Min/day
+              <th className="whitespace-nowrap px-3 py-2.5" title="The Duration worked/day bucket they log most often">
+                Typical range
               </th>
               <th className="whitespace-nowrap px-3 py-2.5">Avg delay</th>
               <th className="whitespace-nowrap px-3 py-2.5">Quality</th>
@@ -165,8 +167,7 @@ export function ProductivityBoard() {
                       <td className="px-3 py-2.5 text-slate-200">{person.openParts}</td>
                       <td className="px-3 py-2.5 text-slate-200">{person.deliveredParts}</td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-slate-200">{worked(person.workedSec)}</td>
-                      <td className="px-3 py-2.5 text-slate-200">
-                        {person.minutesPerDay == null ? "—" : person.minutesPerDay}
+                      <td className="px-3 py-2.5">
                         <RangeBadge name={person.name} snap={snap} />
                       </td>
                       <td

@@ -3,7 +3,6 @@ import {
   animatorProductivity,
   animatorLeave,
   animatorToday,
-  daysLate,
   durationProfile,
   durationRanking,
   formatDmy,
@@ -12,7 +11,6 @@ import {
   formatClock,
   promoFor,
   qualityForAnimator,
-  qualityForEditor,
   STAGE_LABEL,
   teamGroups,
   type DurationProfile,
@@ -49,6 +47,24 @@ export type AskTable = {
   rows: string[][];
 };
 
+export type AskIntent =
+  | "availability"
+  | "agency_availability"
+  | "leave"
+  | "open_promos"
+  | "delivery"
+  | "capacity"
+  | "productivity"
+  | "avg_promo_time"
+  | "person_plot"
+  | "person_when_free"
+  | "person_promo"
+  | "person_rating_feedback"
+  | "person_full"
+  | "promo_close"
+  | "promo_status"
+  | "sheets";
+
 export type AskReply = {
   heading: string;
   lines: string[];
@@ -58,6 +74,8 @@ export type AskReply = {
   tables?: AskTable[];
   /** The promo or person this answer is about, so the next question can follow it. */
   focus?: AskChoice;
+  /** So a follow-up like "what about Dhara?" can reuse the same kind of answer. */
+  intent?: AskIntent;
 };
 
 function norm(value: string): string {
@@ -189,14 +207,44 @@ function tokenNear(word: string, token: string): boolean {
   return editDistance(word, token) <= limit;
 }
 
+const NAME_STOP = new Set([
+  "the",
+  "and",
+  "for",
+  "promo",
+  "promos",
+  "show",
+  "shows",
+  "animation",
+  "animator",
+  "animators",
+  "available",
+  "availability",
+  "free",
+  "status",
+  "open",
+  "part",
+  "parts",
+  "artist",
+  "house",
+  "inhouse",
+  "working",
+  "leave",
+  "today",
+  "current",
+  "deliver",
+  "delivery",
+  "close",
+]);
+
 /** 100 when the name is written out. Lower when only some words, or a spelling, match. */
 function nameScore(question: string, name: string): number {
   const label = norm(name);
   if (label.length < 3) return 0;
   const asked = norm(question);
-  if (asked.includes(label)) return 100;
-  const words = asked.split(" ").filter((word) => word.length >= 3);
-  const tokens = label.split(" ").filter((token) => token.length >= 3);
+  if (asked.includes(label) && !NAME_STOP.has(label)) return 100;
+  const words = asked.split(" ").filter((word) => word.length >= 3 && !NAME_STOP.has(word));
+  const tokens = label.split(" ").filter((token) => token.length >= 3 && !NAME_STOP.has(token));
   if (!words.length || !tokens.length) return 0;
   let weight = 0;
   let matched = 0;
@@ -247,8 +295,7 @@ function qualityFor(snap: OpsSnapshot, name: string, promoId: string): string {
     .map((review) => review.animation?.overallQuality)
     .filter((score): score is number => score != null);
   if (!scores.length) return "—";
-  const average = Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 10) / 10;
-  return `${average}/5`;
+  return `${scores[scores.length - 1]}/5`;
 }
 
 /** Production Tracker artist joined to that show on the Animation productivity sheet. */
@@ -309,7 +356,7 @@ function promoWorkTable(snap: OpsSnapshot, promo: Promo): AskTable {
   const base = promo.id.split("#")[0];
   const parts = snap.parts
     .filter((part) => part.promoId === base || part.promoId.split("#")[0] === base)
-    .filter((part) => part.stage !== "delivered")
+    .filter((part) => part.stage !== "delivered" && part.team !== "agency")
     .sort((a, b) => a.partNo - b.partNo);
   const rows = parts.map((part) => {
     const artist = part.artist?.trim() || "—";
@@ -332,7 +379,17 @@ function promoWorkTable(snap: OpsSnapshot, promo: Promo): AskTable {
   };
 }
 
-function answerPerson(snap: OpsSnapshot, name: string): string[] {
+const RECENT_FEEDBACK_PROMOS = 3;
+
+function onLeaveToday(snap: OpsSnapshot, name: string): boolean {
+  return /leave/i.test(animatorToday(snap, name));
+}
+
+function holdPromo(title: string): string {
+  return title.replace(/\s*·\s*P\d+$/, "");
+}
+
+function plotLinesForPerson(snap: OpsSnapshot, name: string): string[] {
   const lines: string[] = [];
   const placements = teamGroups(snap).flatMap((group) =>
     group.people
@@ -341,63 +398,175 @@ function answerPerson(snap: OpsSnapshot, name: string): string[] {
   );
   const open = placements.filter((place) => place.person.holds.length > 0);
   if (open.length === 0) {
-    lines.push(`${name} is not plotted on an open part. They show as free.`);
-  } else {
-    for (const place of open) {
-      lines.push(`${name} is in ${place.group}.`);
-      const buckets = new Map<string, { until: string | null; doing: string; parts: number[] }>();
-      for (const hold of place.person.holds) {
-        const partNo = Number(hold.title.match(/P(\d+)$/)?.[1]);
-        const key = `${hold.until ?? ""}|${hold.doing}`;
-        const bucket = buckets.get(key) ?? { until: hold.until, doing: hold.doing, parts: [] };
-        if (!Number.isNaN(partNo)) bucket.parts.push(partNo);
-        buckets.set(key, bucket);
-      }
-      for (const bucket of buckets.values()) {
-        const when = bucket.until ? formatDmy(bucket.until) : "no plotted date";
-        const same = bucket.parts.length > 1 ? `Parts ${formatPartList(bucket.parts)} share ${when}` : `Part ${bucket.parts[0] ?? "—"} is on ${when}`;
-        const late =
-          bucket.until && bucket.until < snap.today
-            ? ` That day is ${daysLate(bucket.until, snap.today)} day${daysLate(bucket.until, snap.today) === 1 ? "" : "s"} past, and the work is still open.`
-            : "";
-        lines.push(`${same}. ${bucket.doing}.${late}`);
-      }
+    lines.push(`${name} is not plotted on an open part.`);
+    return lines;
+  }
+  for (const place of open) {
+    if (place.group !== "Animation" && place.group !== "Agency") continue;
+    const buckets = new Map<string, { promo: string; until: string | null; doing: string; parts: number[] }>();
+    for (const hold of place.person.holds) {
+      const partNo = Number(hold.title.match(/P(\d+)$/)?.[1]);
+      const promo = holdPromo(hold.title);
+      const key = `${promo}|${hold.until ?? ""}|${hold.doing}`;
+      const bucket = buckets.get(key) ?? { promo, until: hold.until, doing: hold.doing, parts: [] };
+      if (!Number.isNaN(partNo)) bucket.parts.push(partNo);
+      buckets.set(key, bucket);
+    }
+    for (const bucket of buckets.values()) {
+      const when = bucket.until ? formatDmy(bucket.until) : "no plotted date";
+      const same =
+        bucket.parts.length > 1
+          ? `Parts ${formatPartList(bucket.parts)} of ${bucket.promo} share ${when}`
+          : `Part ${bucket.parts[0] ?? "—"} of ${bucket.promo} is on ${when}`;
+      const late =
+        bucket.until && bucket.until < snap.today
+          ? ` Should already be free since ${when}, still on ${bucket.promo}.`
+          : "";
+      lines.push(`${same}. ${bucket.doing}.${late}`);
     }
   }
+  if (lines.length === 0) lines.push(`${name} is not plotted on an open in-house part.`);
+  return lines;
+}
 
-  const reviews = qualityForAnimator(snap, name);
-  const scores = reviews
-    .map((review) => review.animation?.overallQuality)
-    .filter((score): score is number => score != null);
-  if (scores.length === 0) {
-    lines.push(`Master Productivity has no animation rating for ${name}.`);
-  } else {
-    const average = Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 10) / 10;
+function whenFreeLines(snap: OpsSnapshot, name: string): string[] {
+  const today = animatorToday(snap, name);
+  const animation = teamGroups(snap).find((group) => group.id === "animation");
+  const person = animation?.people.find((row) => norm(row.name) === norm(name));
+  const holds = person?.holds ?? [];
+  const lines: string[] = [];
+  if (onLeaveToday(snap, name)) lines.push(`${name} is on leave today (${today}).`);
+  if (holds.length === 0) {
+    lines.push(onLeaveToday(snap, name) ? `${name} has no open plot — free for work after leave.` : `${name} is free now.`);
+    return lines;
+  }
+  const overdue = holds.filter((hold) => hold.until && hold.until < snap.today);
+  const upcoming = holds.filter((hold) => !hold.until || hold.until >= snap.today);
+  for (const hold of overdue) {
     lines.push(
-      `Master Productivity rating is ${average}/5 across ${scores.length} review${scores.length === 1 ? "" : "s"}.`
+      `Should already be free since ${formatDmy(hold.until)}, still on ${holdPromo(hold.title)}.`
     );
   }
-
-  const notes = feedbackLines(snap, reviews, "animation");
-  const editorNotes = feedbackLines(snap, qualityForEditor(snap, name), "edit");
-  const allNotes = [...notes, ...editorNotes];
-  if (allNotes.length === 0) {
-    lines.push(`Master Productivity has no written feedback for ${name}.`);
-  } else {
-    lines.push("Feedback:");
-    lines.push(...allNotes.slice(0, 6));
+  const last = upcoming
+    .map((hold) => hold.until)
+    .filter((date): date is string => !!date)
+    .sort()
+    .at(-1);
+  if (last) {
+    const promo = holdPromo(upcoming.find((hold) => hold.until === last)?.title ?? holds[0].title);
+    lines.push(`Free after ${formatDmy(last)} (${promo}).`);
+  } else if (!overdue.length) {
+    lines.push(`${name} is plotted with no date on the sheet.`);
   }
-  lines.push(...productivityLines(snap, name));
-  lines.push(...workedDaysLines(snap, name));
-  const today = animatorToday(snap, name);
-  const leaves = animatorLeave(snap, name);
-  if (today !== "—") lines.push(`${name} is marked ${today} on the attendance record.`);
-  lines.push(
-    leaves
-      ? `${name} has leave this month on ${leaves}. Earlier months stay on the Attendance log sheet.`
-      : `${name} has no leave days in the saved attendance.`
-  );
   return lines;
+}
+
+function latestRatingLine(snap: OpsSnapshot, name: string): string | null {
+  const reviews = qualityForAnimator(snap, name);
+  for (let i = reviews.length - 1; i >= 0; i--) {
+    const score = reviews[i]?.animation?.overallQuality;
+    if (score != null) {
+      const promo = promoFor(snap, reviews[i].promoId);
+      const title = promo ? `${promo.showName} · ${promo.promoName}` : reviews[i].promoId;
+      return `Latest rating ${score}/5 on ${title} P${reviews[i].partNo}.`;
+    }
+  }
+  return null;
+}
+
+function feedbackForPerson(snap: OpsSnapshot, name: string): { recent: string[]; older: string[] } {
+  const reviews = qualityForAnimator(snap, name);
+  const order: string[] = [];
+  for (const review of reviews) {
+    const key = review.promoId.split("#")[0];
+    if (!order.includes(key)) order.push(key);
+  }
+  const recentIds = new Set(order.slice(-RECENT_FEEDBACK_PROMOS));
+  const recent = feedbackLines(
+    snap,
+    reviews.filter((review) => recentIds.has(review.promoId.split("#")[0])),
+    "animation"
+  );
+  const olderReviews = reviews.filter((review) => !recentIds.has(review.promoId.split("#")[0]));
+  const olderTitles = [
+    ...new Set(
+      olderReviews.map((review) => {
+        const promo = promoFor(snap, review.promoId);
+        return promo ? `${promo.showName} · ${promo.promoName}` : review.promoId.split("|")[0];
+      })
+    ),
+  ];
+  const olderNotes = olderReviews
+    .map((review) => (review.animation?.remark || review.animation?.weakAreas || review.editing?.remark || "").trim())
+    .filter(Boolean);
+  const older =
+    olderTitles.length === 0
+      ? []
+      : [
+          `Older promos: ${olderTitles.join("; ")}.${
+            olderNotes.length ? ` Repeated notes: ${olderNotes.slice(0, 2).map((note) => (note.length > 160 ? `${note.slice(0, 160)}…` : note)).join(" ")}` : ""
+          }`,
+        ];
+  return { recent, older };
+}
+
+function answerPerson(snap: OpsSnapshot, name: string, intent: AskIntent): { lines: string[]; tables?: AskTable[] } {
+  if (intent === "person_promo") {
+    const plots = plotLinesForPerson(snap, name);
+    return {
+      lines:
+        plots[0]?.includes("not plotted")
+          ? [`${name} is not on an open promo.`]
+          : plots,
+    };
+  }
+  if (intent === "person_when_free") {
+    const lines = [...plotLinesForPerson(snap, name), ...whenFreeLines(snap, name)];
+    return { lines: [...new Set(lines)] };
+  }
+  if (intent === "person_plot") return { lines: plotLinesForPerson(snap, name) };
+  if (intent === "person_rating_feedback") {
+    const lines: string[] = [];
+    const rating = latestRatingLine(snap, name);
+    if (rating) lines.push(rating);
+    const { recent, older } = feedbackForPerson(snap, name);
+    if (recent.length) {
+      lines.push("Recent feedback:");
+      lines.push(...recent.slice(0, 6));
+    }
+    lines.push(...older);
+    if (lines.length === 0) lines.push(`No rating or written feedback for ${name} on recent promos.`);
+    const table = personFeedbackTable(snap, name);
+    const recentRows = table.rows.slice(0, 6);
+    return { lines, tables: recentRows.length ? [{ ...table, rows: recentRows, title: "Recent feedback" }] : undefined };
+  }
+  if (intent === "productivity") {
+    const lines = [
+      ...productivityLines(snap, name).filter((line) => !/min\/day/i.test(line)),
+      ...workedDaysLines(snap, name),
+    ];
+    return { lines: lines.length ? lines : [`No productivity rows for ${name}.`] };
+  }
+
+  const plots = plotLinesForPerson(snap, name);
+  const lines: string[] = [...plots];
+  for (const line of whenFreeLines(snap, name)) {
+    if (!lines.includes(line)) lines.push(line);
+  }
+  const rating = latestRatingLine(snap, name);
+  if (rating) lines.push(rating);
+  const { recent, older } = feedbackForPerson(snap, name);
+  if (recent.length) {
+    lines.push("Recent feedback:");
+    lines.push(...recent.slice(0, 4));
+  }
+  lines.push(...older);
+  const today = animatorToday(snap, name);
+  if (today !== "—") lines.push(`${name} is marked ${today} today.`);
+  const leaves = animatorLeave(snap, name);
+  if (leaves) lines.push(`Leave this month: ${leaves}.`);
+  const tables = [personWorkTable(snap, name), personFeedbackTable(snap, name)].filter((table) => table.rows.length > 0);
+  return { lines: [...new Set(lines)], tables: tables.length ? tables : undefined };
 }
 
 /** Compresses a sorted list of ISO dates into "3, 4, 5 Nov" style runs, split by month. */
@@ -477,9 +646,7 @@ function productivityLines(snap: OpsSnapshot, name: string): string[] {
   );
   if (person.daysWorked > 0) {
     lines.push(
-      `Animation productivity sheet: ${person.daysWorked} day${person.daysWorked === 1 ? "" : "s"}${
-        person.minutesPerDay != null ? `, about ${person.minutesPerDay} min/day` : ""
-      }.`
+      `Animation productivity sheet: ${person.daysWorked} day${person.daysWorked === 1 ? "" : "s"} logged.`
     );
   } else {
     lines.push("The Animation productivity sheet has no daily rows for this name.");
@@ -512,10 +679,13 @@ function productivityLines(snap: OpsSnapshot, name: string): string[] {
 function feedbackLines(snap: OpsSnapshot, reviews: QualityReview[], kind: "animation" | "edit"): string[] {
   return reviews.flatMap((review) => {
     const block = kind === "animation" ? review.animation : review.editing;
-    const bits = [block?.remark, kind === "animation" ? review.animation?.weakAreas : null].filter(
-      (bit): bit is string => !!bit && bit.trim().length > 0
-    );
-    if (bits.length === 0 && block == null) return [];
+    // Same fallback order as personFeedbackTable: a note can land under editing.remark even on a
+    // review matched by animator, so check it too before calling feedback "missing".
+    const bits = [
+      block?.remark,
+      kind === "animation" ? review.animation?.weakAreas : null,
+      kind === "animation" ? review.editing?.remark : null,
+    ].filter((bit): bit is string => !!bit && bit.trim().length > 0);
     const score = kind === "animation" ? review.animation?.overallQuality : null;
     if (bits.length === 0 && score == null) return [];
     const promo = promoFor(snap, review.promoId);
@@ -557,8 +727,10 @@ function wantsPowerStart(question: string): boolean {
 
 function answerPromo(snap: OpsSnapshot, promo: Promo, question = ""): string[] {
   const base = promo.id.split("#")[0];
+  const includeAgency = /\bagency\b/i.test(question);
   const parts = snap.parts
     .filter((part) => part.promoId === base || part.promoId.split("#")[0] === base)
+    .filter((part) => includeAgency || part.team !== "agency")
     .sort((a, b) => a.partNo - b.partNo);
   const title = promo.promoName ? `${promo.showName} · ${promo.promoName}` : promo.showName;
   if (parts.length === 0) {
@@ -612,10 +784,7 @@ function answerPromo(snap: OpsSnapshot, promo: Promo, question = ""): string[] {
   } else if (last === snap.today) {
     lines.push(`The latest plotted date is today, ${formatDmy(last)}. It is still open.`);
   } else {
-    const late = daysLate(last, snap.today);
-    lines.push(
-      `The latest plotted date was ${formatDmy(last)}, ${late} day${late === 1 ? "" : "s"} ago. The parts are still open, so it has not closed. The sheet does not have a new close date.`
-    );
+    lines.push(`Should have closed on ${formatDmy(last)}, still open.`);
   }
   const remain = open.reduce((sum, part) => sum + (part.durationSec || 0), 0);
   if (remain > 0) lines.push(`Open parts still add up to ${formatDuration(remain)}.`);
@@ -675,70 +844,189 @@ const SHEET_GUIDE = [
   "Remarks tab: every time a plan is recorded, kept as its own row.",
 ];
 
-function answerSummary(snap: OpsSnapshot, question: string): AskReply {
-  const groups = teamGroups(snap);
-  const q = norm(question);
-  const wantFree = /\bfree\b/.test(q);
-  const wantLate = /\blate|delay|overdue|slipped\b/.test(q);
-  const groupWanted = groups.find((group) => q.includes(norm(group.label)) || (group.id === "animation" && /\banimator|in house|inhouse\b/.test(q)));
+function animationPeople(snap: OpsSnapshot) {
+  return teamGroups(snap).find((group) => group.id === "animation")?.people ?? [];
+}
 
-  if (groupWanted && !wantFree && !wantLate) {
-    const busy = groupWanted.people.filter((person) => person.holds.length > 0);
-    const free = groupWanted.people.filter((person) => person.holds.length === 0);
-    return {
-      heading: groupWanted.label,
-      lines: [
-        busy.length
-          ? `${busy.length} ${groupWanted.label} ${busy.length === 1 ? "person is" : "people are"} still plotted: ${busy.map((person) => person.name).join(", ")}.`
-          : `Nobody in ${groupWanted.label} is on an open plot.`,
-        free.length ? `${free.length} show as free: ${free.map((person) => person.name).join(", ")}.` : "",
-      ].filter(Boolean),
-    };
-  }
+function agencyPeople(snap: OpsSnapshot) {
+  return teamGroups(snap).find((group) => group.id === "agency")?.people ?? [];
+}
 
-  if (wantFree) {
-    const lines = groups
-      .map((group) => {
-        const free = group.people.filter((person) => person.holds.length === 0).map((person) => person.name);
-        return free.length ? `${group.label}: ${free.join(", ")}.` : "";
-      })
-      .filter(Boolean);
-    return { heading: "Who is free", lines: lines.length ? lines : ["Nobody on the team list is free."] };
-  }
-
-  if (wantLate) {
-    const lines: string[] = [];
-    for (const group of groups) {
-      for (const person of group.people) {
-        const late = person.holds.filter((hold) => hold.until && hold.until < snap.today);
-        if (late.length === 0) continue;
-        lines.push(
-          `${person.name} (${group.label}) is still plotted past ${late.map((hold) => formatDmy(hold.until)).join(", ")}.`
-        );
-      }
+function availabilityReply(snap: OpsSnapshot, agency: boolean): AskReply {
+  const people = agency ? agencyPeople(snap) : animationPeople(snap);
+  const free: string[] = [];
+  const leave: string[] = [];
+  const plotted: string[] = [];
+  const overdue: string[] = [];
+  for (const person of people) {
+    const off = onLeaveToday(snap, person.name);
+    if (off) leave.push(`${person.name} (${animatorToday(snap, person.name)})`);
+    const lateHolds = person.holds.filter((hold) => hold.until && hold.until < snap.today);
+    const futureHolds = person.holds.filter((hold) => !hold.until || hold.until >= snap.today);
+    if (lateHolds.length) {
+      overdue.push(
+        `${person.name} — ${lateHolds.map((hold) => `${holdPromo(hold.title)} since ${formatDmy(hold.until)}`).join("; ")}`
+      );
     }
+    if (futureHolds.length) {
+      const last = futureHolds
+        .map((hold) => hold.until)
+        .filter((date): date is string => !!date)
+        .sort()
+        .at(-1);
+      plotted.push(last ? `${person.name} until ${formatDmy(last)}` : person.name);
+    }
+    if (person.holds.length === 0 && !off) free.push(person.name);
+  }
+  const who = agency ? "Agency" : "In-house animators";
+  const lines = [
+    `${who} free for new work: ${free.length ? free.join(", ") : "nobody"}.`,
+    `On leave today: ${leave.length ? leave.join("; ") : "nobody"}.`,
+    `Still plotted: ${plotted.length ? plotted.join("; ") : "nobody"}.`,
+    `Should be free / overdue: ${overdue.length ? overdue.join("; ") : "nobody"}.`,
+  ];
+  if (!agency) lines.push("Want agency availability as well?");
+  return { heading: agency ? "Agency availability" : "Animator availability", lines, intent: agency ? "agency_availability" : "availability" };
+}
+
+function openPromoRows(snap: OpsSnapshot, includeAgency: boolean) {
+  const seen = new Set<string>();
+  const rows: { promo: Promo; parts: Part[]; last: string | null; overdue: boolean }[] = [];
+  for (const promo of snap.promos) {
+    const base = promo.id.split("#")[0];
+    if (seen.has(base)) continue;
+    const parts = snap.parts
+      .filter((part) => (part.promoId === base || part.promoId.split("#")[0] === base) && part.stage !== "delivered")
+      .filter((part) => includeAgency || part.team !== "agency");
+    if (parts.length === 0) continue;
+    seen.add(base);
+    const dates = parts.map(plotDate).filter((date): date is string => !!date).sort();
+    const last = dates.at(-1) ?? null;
+    rows.push({ promo, parts, last, overdue: !!last && last < snap.today });
+  }
+  return rows;
+}
+
+function openPromosReply(snap: OpsSnapshot): AskReply {
+  const rows = openPromoRows(snap, false);
+  const lines = rows.length
+    ? rows.map((row) => {
+        const title = row.promo.promoName ? `${row.promo.showName} · ${row.promo.promoName}` : row.promo.showName;
+        const stages = [...new Set(row.parts.map((part) => STAGE_LABEL[part.stage] ?? part.stage))].join(", ");
+        const who = [...new Set(row.parts.map((part) => part.artist?.trim()).filter(Boolean))].join(", ") || "unassigned";
+        if (!row.last) return `${title}: ${row.parts.length} open part(s), ${stages}, ${who}. No plotted close date.`;
+        if (row.overdue) return `${title}: ${row.parts.length} open part(s), ${stages}, ${who}. Should have closed on ${formatDmy(row.last)}, still open.`;
+        return `${title}: ${row.parts.length} open part(s), ${stages}, ${who}. Plotted ${formatDmy(row.last)}.`;
+      })
+    : ["No in-house production parts are open."];
+  return { heading: "Current promos", lines, intent: "open_promos" };
+}
+
+function deliveryReply(snap: OpsSnapshot): AskReply {
+  const rows = openPromoRows(snap, false);
+  const lines = rows.length
+    ? rows.map((row) => {
+        const title = row.promo.promoName ? `${row.promo.showName} · ${row.promo.promoName}` : row.promo.showName;
+        if (!row.last) return `${title}: no plotted close date.`;
+        if (row.overdue) return `${title}: should have closed on ${formatDmy(row.last)}, still open.`;
+        const left = daysUntil(snap.today, row.last);
+        return `${title}: plotted ${formatDmy(row.last)} (${left} day${left === 1 ? "" : "s"} left).`;
+      })
+    : ["No in-house open promos to deliver."];
+  return { heading: "Delivery dates", lines, intent: "delivery" };
+}
+
+function capacityReply(snap: OpsSnapshot): AskReply {
+  const availability = availabilityReply(snap, false);
+  return {
+    heading: "When new promos can start",
+    lines: [
+      ...availability.lines,
+      "New in-house work can go to anyone in the free-for-new-work list. Overdue people should already be free but are still on an open part.",
+    ],
+    intent: "capacity",
+  };
+}
+
+function productivityAllReply(snap: OpsSnapshot): AskReply {
+  const names = animationPeople(snap).map((person) => person.name);
+  const ranked = durationRanking(snap).filter((row) => names.some((name) => norm(name) === norm(row.name)));
+  const lines = ranked.length
+    ? ranked.map((row) => typicalRangeLine(row))
+    : ["No Duration worked/day rows for in-house animators yet."];
+  const tableRows = ranked.map((row) => [
+    row.name,
+    row.typicalRange ? `${DURATION_WORKED_BUCKETS[row.typicalRange].label} (${DURATION_WORKED_BUCKETS[row.typicalRange].tier})` : "—",
+    ...DURATION_BUCKET_ORDER.map((bucket) => `${row.counts[bucket]}`),
+  ]);
+  return {
+    heading: "Productivity by artist",
+    lines: lines.map((line, i) => `${ranked[i]?.name}: ${line}`),
+    tables: tableRows.length
+      ? [{ title: "Duration worked/day", columns: ["Artist", "Typical", "<3 min", "3-5 min", "5-7 min", ">7 min"], rows: tableRows }]
+      : undefined,
+    intent: "productivity",
+  };
+}
+
+function isoDiffDays(start: string, end: string): number {
+  const a = new Date(`${start}T00:00:00Z`).getTime();
+  const b = new Date(`${end}T00:00:00Z`).getTime();
+  return Math.round((b - a) / 86400000);
+}
+
+function avgPromoTimeReply(snap: OpsSnapshot): AskReply {
+  const groups = new Map<string, Part[]>();
+  for (const part of snap.parts) {
+    if (part.team === "agency") continue;
+    const base = part.promoId.split("#")[0];
+    const list = groups.get(base) ?? [];
+    list.push(part);
+    groups.set(base, list);
+  }
+  const durations: number[] = [];
+  for (const parts of groups.values()) {
+    if (!parts.length || parts.some((part) => part.stage !== "delivered")) continue;
+    const starts = parts.map((part) => part.aniStartDate).filter((date): date is string => !!date).sort();
+    const ends = parts
+      .map((part) => part.soundEndDate || part.aniCloseDate || part.editCloseDate)
+      .filter((date): date is string => !!date)
+      .sort();
+    if (!starts.length || !ends.length) continue;
+    const days = isoDiffDays(starts[0], ends[ends.length - 1]);
+    if (days >= 0) durations.push(days);
+  }
+  if (!durations.length) {
     return {
-      heading: "Past the plotted date",
-      lines: lines.length ? lines : ["No open plot is past its date."],
+      heading: "Average promo time",
+      lines: ["Not enough closed in-house promos with start and close dates to average."],
+      intent: "avg_promo_time",
     };
   }
-
-  const openParts = snap.parts.filter((part) => part.stage !== "delivered");
-  const shows = new Set(openParts.map((part) => part.promoId.split("|")[0]));
-  const occupied = groups
-    .filter((group) => group.id === "animation" || group.id === "agency")
-    .flatMap((group) =>
-      group.people
-        .filter((person) => person.holds.length > 0)
-        .map((person) => `${person.name} (${group.label})`)
-    );
+  const avg = Math.round(durations.reduce((sum, n) => sum + n, 0) / durations.length);
   return {
-    heading: "What is open",
+    heading: "Average promo time",
     lines: [
-      `${openParts.length} production parts are still open across ${shows.size} shows.`,
-      occupied.length ? `Still plotted: ${occupied.join(", ")}.` : "No animator or agency is on an open part.",
-      "Ask for a person to see where they are plotted, their rating, and feedback. Ask for a show to see when it is plotted to close.",
+      `Closed in-house promos average ${avg} day${avg === 1 ? "" : "s"} from animation start to close (${durations.length} promo${durations.length === 1 ? "" : "s"}).`,
     ],
+    intent: "avg_promo_time",
+  };
+}
+
+function leaveReply(snap: OpsSnapshot): AskReply {
+  const names = animationPeople(snap).map((person) => person.name);
+  const rows = names.map((name) => [name, animatorToday(snap, name), animatorLeave(snap, name) || "—"]);
+  const working = rows.filter((row) => /^working$/i.test(row[1])).map((row) => row[0]);
+  const leave = rows.filter((row) => /leave/i.test(row[1]));
+  const lines = [
+    working.length ? `Working today: ${working.join(", ")}.` : "Nobody is marked Working today.",
+    leave.length ? `On leave today: ${leave.map((row) => `${row[0]} (${row[1]})`).join("; ")}.` : "Nobody on leave today.",
+  ];
+  return {
+    heading: "Attendance today",
+    lines,
+    tables: [{ title: "Attendance", columns: ["Animator", "Today", "Leave"], rows }],
+    intent: "leave",
   };
 }
 
@@ -765,114 +1053,155 @@ function rankedChoices(snap: OpsSnapshot, question: string): { score: number; ch
   return found.sort((a, b) => b.score - a.score || a.choice.label.localeCompare(b.choice.label));
 }
 
-function replyFor(snap: OpsSnapshot, choice: AskChoice, question = ""): AskReply {
+function replyFor(snap: OpsSnapshot, choice: AskChoice, question = "", intent: AskIntent = "person_full"): AskReply {
   if (choice.kind === "person") {
-    const tables = [personWorkTable(snap, choice.id), personFeedbackTable(snap, choice.id)].filter(
-      (table) => table.rows.length > 0
-    );
+    const personIntent: AskIntent = intent.startsWith("person") || intent === "productivity" ? intent : "person_full";
+    const answered = answerPerson(snap, choice.id, personIntent);
     return {
       heading: choice.label,
-      lines: answerPerson(snap, choice.id),
-      table: tables[0],
-      tables,
+      lines: answered.lines,
+      table: answered.tables?.[0],
+      tables: answered.tables,
       focus: choice,
+      intent: personIntent,
     };
   }
   const promo = snap.promos.find((item) => item.id === choice.id);
-  if (!promo) return { heading: choice.label, lines: ["That promo is not on the sheets."] };
+  if (!promo) return { heading: choice.label, lines: ["That promo is not on the sheets."], intent: "promo_status" };
   const table = promoWorkTable(snap, promo);
+  const promoIntent: AskIntent = intent === "promo_close" ? "promo_close" : "promo_status";
   return {
     heading: promo.showName || choice.label,
     lines: answerPromo(snap, promo, question),
     table: table.rows.length ? table : undefined,
     focus: choice,
+    intent: promoIntent,
   };
 }
 
+const PERSON_INTENTS: AskIntent[] = [
+  "person_plot",
+  "person_when_free",
+  "person_promo",
+  "person_rating_feedback",
+  "person_full",
+];
+
+function hasPronoun(question: string): boolean {
+  return /\b(she|he|her|him|they|them|their)\b/i.test(question);
+}
+
+function detectIntent(question: string, lastIntent?: AskIntent | null): AskIntent {
+  const q = question.toLowerCase();
+  if (/\bagency\b/.test(q) && /\b(free|available|availability)\b/.test(q)) return "agency_availability";
+  if (/\b(on leave|who is working|attendance)\b/.test(q) && !hasPronoun(q)) return "leave";
+  if (/\bavg(erage)?\s*time\b|\bhow long\b.{0,40}\bpromo|\btime taking to complete\b|\bcomplete 1 promo\b|\bone promo\b/.test(q)) {
+    return "avg_promo_time";
+  }
+  if (/\btake new promo|\bnew promos?\b|\bcapacity\b|\bwho can take\b/.test(q)) return "capacity";
+  if (/\bproductiv|\btypical range\b|\bduration worked\b|\bwho (is |are )?(more |most )?productive\b/.test(q)) {
+    return "productivity";
+  }
+  if (/\bquick status\b|\bcurrent promo|\bwhat( is|'s)? open\b|\bstatus of (the )?(current )?promos?\b/.test(q)) {
+    return "open_promos";
+  }
+  if (/\bwhen will.{0,30}(deliver|close)|\bdelivering the promo|\bwhen.{0,20}promos?.{0,16}(close|deliver)/.test(q)) {
+    return "delivery";
+  }
+  if (
+    !hasPronoun(q) &&
+    (/\bwho is free\b/.test(q) ||
+      /\banimators?\b/.test(q) && /\b(free|available|availability)\b/.test(q) ||
+      /\bavailability\b/.test(q) ||
+      /\bwho( is|'s)? available\b/.test(q) ||
+      (/\bfree\b/.test(q) && !/\bwhat about\b/.test(q)))
+  ) {
+    return "availability";
+  }
+  if (/\bsheet|spreadsheet|which tab|what do you (read|use)\b/.test(q)) return "sheets";
+
+  if (/\bwhen.{0,16}(free|available)\b/.test(q)) return "person_when_free";
+  if (/\bwhich promo\b|\bworking on\b|\bwhat promo\b|\bwhich show\b|\bshe is in\b|\bhe is in\b/.test(q)) return "person_promo";
+  if (/\b(rating|feedback)\b/.test(q) && /\b(plotted|where)\b/.test(q)) return "person_full";
+  if (/\b(rating|feedback)\b/.test(q)) return "person_rating_feedback";
+  if (/\bplotted\b|\bwhere is\b/.test(q)) return "person_plot";
+  if (/\bwhat about\b/.test(q) && lastIntent && PERSON_INTENTS.includes(lastIntent)) return lastIntent;
+  if (hasPronoun(q) && lastIntent && PERSON_INTENTS.includes(lastIntent)) return lastIntent;
+  if (/\btell me about\b|\boverview\b/.test(q)) return "person_full";
+  if (/\bwhen\b/.test(q) && /\b(close|deliver|finish)\b/.test(q)) return "promo_close";
+  return lastIntent ?? "person_full";
+}
+
+const TEAM_INTENTS: AskIntent[] = [
+  "availability",
+  "agency_availability",
+  "leave",
+  "open_promos",
+  "delivery",
+  "capacity",
+  "productivity",
+  "avg_promo_time",
+  "sheets",
+];
+
+function teamReply(snap: OpsSnapshot, intent: AskIntent): AskReply {
+  if (intent === "agency_availability") return availabilityReply(snap, true);
+  if (intent === "availability") return availabilityReply(snap, false);
+  if (intent === "leave") return leaveReply(snap);
+  if (intent === "open_promos") return openPromosReply(snap);
+  if (intent === "delivery") return deliveryReply(snap);
+  if (intent === "capacity") return capacityReply(snap);
+  if (intent === "productivity") return productivityAllReply(snap);
+  if (intent === "avg_promo_time") return avgPromoTimeReply(snap);
+  return { heading: "Sheets I use", lines: SHEET_GUIDE, intent: "sheets" };
+}
+
 /** Answer from the sheets already loaded in the dashboard. */
-export function answerOps(snap: OpsSnapshot, question: string, pick?: AskChoice, follow?: AskChoice): AskReply {
+export function answerOps(
+  snap: OpsSnapshot,
+  question: string,
+  pick?: AskChoice,
+  follow?: AskChoice,
+  lastIntent?: AskIntent | null
+): AskReply {
   const asked = question.trim();
   if (!asked && !pick) {
     return { heading: "Ask about the sheets", lines: ["Name an artist or a show."] };
   }
-  if (pick) return replyFor(snap, pick, asked);
+  const intent = detectIntent(asked, lastIntent);
+  if (pick) return replyFor(snap, pick, asked, intent);
+
+  if (TEAM_INTENTS.includes(intent)) {
+    const named = peopleInQuestion(snap, asked)[0];
+    if (named && (intent === "productivity" || PERSON_INTENTS.includes(intent))) {
+      return replyFor(snap, { kind: "person", id: named, label: named }, asked, intent === "productivity" ? "productivity" : intent);
+    }
+    return teamReply(snap, intent);
+  }
+
   const ranked = rankedChoices(snap, asked);
   const best = ranked[0];
-  const general = /\bwho is free|what is open|which sheet|past their plotted|what do you (read|use)|available|on leave|who is working\b/i.test(
+  const followUp = /\b(she|he|him|her|their|they|them|that|this|same|also|too|again|his|its|it's|what about|how about)\b/i.test(
     asked
   );
-  if ((!best || best.score < 70) && /\b(available|on leave|who is working)\b/i.test(asked)) {
-    const names = new Map<string, string>();
-    for (const day of snap.attendance ?? []) {
-      const key = day.name.trim().toLowerCase();
-      if (!names.has(key)) names.set(key, day.name);
-    }
-    const rows = [...names.values()]
-      .sort((a, b) => a.localeCompare(b))
-      .map((name) => [name, animatorToday(snap, name), animatorLeave(snap, name) || "—"]);
-    const working = rows.filter((row) => /^working$/i.test(row[1])).map((row) => row[0]);
-    return {
-      heading: "Animators today",
-      lines: [
-        working.length ? `Working today: ${working.join(", ")}.` : "Nobody is marked Working today.",
-        "Leave shown is this month only. Ask about a named person to pull earlier months from the Attendance log sheet.",
-      ],
-      tables: [{ title: "Attendance", columns: ["Animator", "Today", "Leave"], rows }],
-    };
+  const namedPerson = peopleInQuestion(snap, asked)[0] ?? (best?.choice.kind === "person" && best.score >= 70 ? best.choice.id : undefined);
+
+  if (namedPerson) {
+    return replyFor(snap, { kind: "person", id: namedPerson, label: namedPerson }, asked, intent);
   }
-  const wantsDurationRanking = /\b(deliver|work)s?\s+(more|longer|the most)\b|\bduration range\b|\bwho (works|delivers|does) (more|longer)\b/i.test(
-    asked
-  );
-  if (wantsDurationRanking) {
-    const ranked = durationRanking(snap).slice(0, 15);
-    const rows = ranked.map((row) => [
-      row.name,
-      row.typicalRange ? `${DURATION_WORKED_BUCKETS[row.typicalRange].label} (${DURATION_WORKED_BUCKETS[row.typicalRange].tier})` : "—",
-      ...DURATION_BUCKET_ORDER.map((bucket) => `${row.counts[bucket]}`),
-    ]);
-    const top = ranked.slice(0, 5).map((row) => row.name);
-    return {
-      heading: "Duration worked/day, ranked",
-      lines: [
-        "From the Animation productivity sheet's Duration worked/day column. Correction days are excluded.",
-        top.length ? `Most productive range overall: ${top.join(", ")}.` : "Not enough daily rows yet to rank anyone.",
-      ],
-      tables: rows.length
-        ? [
-            {
-              title: "Duration range by artist",
-              columns: ["Artist", "Typical", "<3 min", "3-5 min", "5-7 min", ">7 min"],
-              rows,
-            },
-          ]
-        : undefined,
-    };
+  if (follow && followUp) return replyFor(snap, follow, asked, intent);
+
+  if (best && best.choice.kind === "promo" && best.score >= 70) {
+    const promoIntent: AskIntent = intent === "promo_close" || intent === "delivery" ? "promo_close" : "promo_status";
+    return replyFor(snap, best.choice, asked, promoIntent);
   }
-  const wantsWorkedDays = /\bwhich (days|dates)|what days|working days\b/i.test(asked) && /\bwork/i.test(asked);
-  if (wantsWorkedDays) {
-    const named = best && best.score >= 70 && best.choice.kind === "person" ? best.choice.label : peopleInQuestion(snap, asked)[0];
-    const name = named ?? follow?.label;
-    if (name) {
-      return {
-        heading: `Worked days — ${name}`,
-        lines: workedDaysLines(snap, name),
-        focus: { kind: "person", id: name, label: name },
-      };
-    }
-  }
-  const followUp = /\b(their|they|them|that|this|same|also|too|again|her|his|its|it's|what about|how about|power\s*starts?|\bps\b|duration|which days|worked days)\b/i.test(
-    asked
-  );
-  if ((!best || best.score < 70) && follow && followUp && !general) return replyFor(snap, follow, asked);
   if (!best) {
-    if (/\bsheet|spreadsheet|which tab|where .*(from|stored|saved)|what do you (read|use)|source\b/i.test(asked)) {
-      return { heading: "Sheets I use", lines: SHEET_GUIDE };
-    }
-    return answerSummary(snap, asked);
+    if (intent === "sheets") return teamReply(snap, "sheets");
+    return teamReply(snap, "open_promos");
   }
   const close = ranked.filter((item) => item.score >= best.score - 12);
   const exact = close.filter((item) => item.score >= 100);
-  if (exact.length === 1) return replyFor(snap, exact[0].choice, asked);
+  if (exact.length === 1) return replyFor(snap, exact[0].choice, asked, intent);
   return {
     heading: "Which one?",
     lines: [
@@ -881,5 +1210,6 @@ export function answerOps(snap: OpsSnapshot, question: string, pick?: AskChoice,
         : `Nothing matches that spelling exactly. Select the closest: ${close[0]?.choice.label ?? ""}.`,
     ],
     choices: (exact.length > 1 ? exact : close).slice(0, 6).map((item) => item.choice),
+    intent,
   };
 }

@@ -60,7 +60,7 @@ export const ANIMATION_PRODUCTIVITY_SHEET = {
       grain: "artist_promo_day" as const,
       role: "throughput_log" as const,
     },
-    dropDowns: { name: "Drop downs", gid: null },
+    dropDowns: { name: "Drop downs", gid: 1597655887 },
     promoNames: { name: "Promo names", gid: null },
     sheet4: { name: "Sheet4", gid: null },
   },

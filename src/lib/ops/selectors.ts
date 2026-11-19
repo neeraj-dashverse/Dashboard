@@ -1267,8 +1267,7 @@ export function teamGroups(snap: OpsSnapshot): TeamGroup[] {
     } else {
       for (const name of splitPersonNames(row.part?.editors)) addHold("agency", name, row, title, "production");
     }
-    const cps = row.promo.cps?.trim();
-    if (cps) addHold("cps", cps, row, title, "production");
+    for (const cps of splitPersonNames(row.promo.cps)) addHold("cps", cps, row, title, "production");
   }
 
   for (const row of plannerPreprodRows(snap)) {

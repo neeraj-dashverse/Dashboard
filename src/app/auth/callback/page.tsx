@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { rememberLoginEmail } from "@/lib/auth/remember-email";
 import { createCallbackSupabase } from "@/lib/supabase/browser";
 
 /**
@@ -29,11 +30,12 @@ export default function AuthCallbackPage() {
     const accessToken = hashParams.get("access_token");
     const refreshToken = hashParams.get("refresh_token");
     if (accessToken && refreshToken) {
-      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }).then(({ error }) => {
+      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }).then(({ data, error }) => {
         if (error) {
           window.location.replace(`/login?error=${encodeURIComponent(error.message)}`);
           return;
         }
+        if (data.session?.user?.email) rememberLoginEmail(data.session.user.email);
         window.location.replace(next.startsWith("/") ? next : "/");
       });
       return;

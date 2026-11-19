@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { rememberLoginEmail } from "@/lib/auth/remember-email";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 export type Role = "admin" | "viewer";
@@ -17,6 +18,10 @@ export function AuthProvider({
   role: Role;
   children: ReactNode;
 }) {
+  useEffect(() => {
+    if (email) rememberLoginEmail(email);
+  }, [email]);
+
   const signOut = async () => {
     const supabase = createBrowserSupabase();
     await supabase.auth.signOut();

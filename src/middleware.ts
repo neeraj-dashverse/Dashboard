@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { AUTH_COOKIE_OPTIONS } from "@/lib/supabase/cookies";
 
 const PUBLIC_PATHS = ["/login", "/auth/callback", "/access-pending"];
 
@@ -12,6 +13,7 @@ export async function middleware(request: NextRequest) {
   if (!url || !key) return response; // Supabase not configured — don't lock everyone out.
 
   const supabase = createServerClient(url, key, {
+    cookieOptions: AUTH_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return request.cookies.getAll();

@@ -18,6 +18,7 @@ import {
 import { batchGet, hasSheetCredentials, normKey, splitNames, text, type Grid } from "./sheets-client";
 import {
   buildAnimators,
+  parseAnimatorRoster,
   matchAsset,
   parseAssets,
   applyMasterDetail,
@@ -151,6 +152,7 @@ async function loadPlanTabs(): Promise<{ planner: Grid; remarks: Grid }> {
 export async function loadFromSheets(): Promise<OpsSnapshot> {
   const masterRange = `'${DASHVERSE_PFM_SHEET.tabs.master.name}'!A1:AH3000`;
   const dailyRange = `'${ANIMATION_PRODUCTIVITY_SHEET.tabs.masterData.name}'!A1:H5000`;
+  const rosterRange = `'${ANIMATION_PRODUCTIVITY_SHEET.tabs.dropDowns.name}'!A1:B200`;
   const [timeline, assetsBook, planTabs, masterBook, dailyBook] = await Promise.all([
     batchGet(TIMELINE, [
       RANGES.masterTracker,
@@ -165,7 +167,7 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
       console.error("[ops] Master Sheet detail read failed:", err);
       return {} as Record<string, Grid>;
     }),
-    batchGet(ANIMATION_PRODUCTIVITY_SHEET.spreadsheetId, [dailyRange]).catch((err) => {
+    batchGet(ANIMATION_PRODUCTIVITY_SHEET.spreadsheetId, [dailyRange, rosterRange]).catch((err) => {
       console.error("[ops] Animation productivity read failed:", err);
       return {} as Record<string, Grid>;
     }),
@@ -193,7 +195,8 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
     partArtistCells.push({ names, team });
   }
   const qualityAnimators = qualityReviews.flatMap((q) => q.animators);
-  const animators = buildAnimators(partArtistCells, qualityAnimators);
+  const rosterNames = parseAnimatorRoster(dailyBook[rosterRange] ?? []);
+  const animators = buildAnimators(partArtistCells, qualityAnimators, rosterNames);
   const animatorIdByName = new Map<string, string>();
   for (const a of animators) animatorIdByName.set(normKey(a.name), a.id);
 

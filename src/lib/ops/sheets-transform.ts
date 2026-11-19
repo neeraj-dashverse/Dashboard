@@ -592,15 +592,41 @@ export function matchAsset(promo: Promo, assets: AssetRow[]): AssetTeamRow | nul
 
 // ── Animators (derived from parts + quality) ──────────────────────────────────
 
+/**
+ * Official in-house animator list from Animation productivity · Drop downs · Artist column.
+ * Blank rows skipped. Order is the sheet order.
+ */
+export function parseAnimatorRoster(rows: Grid): string[] {
+  const header = (rows[0] ?? []).map((cell) => String(cell ?? "").trim());
+  let col = header.findIndex((h) => /^artist$/i.test(h));
+  if (col < 0) col = 1;
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const row of rows.slice(1)) {
+    const name = text(row[col]);
+    if (!name) continue;
+    const key = normKey(name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    names.push(name);
+  }
+  return names;
+}
+
 export function buildAnimators(
   partArtistCells: { names: string[]; team: TeamKind }[],
-  qualityAnimators: string[]
+  qualityAnimators: string[],
+  rosterNames: string[] = []
 ): Animator[] {
   const teamByName = new Map<string, TeamKind>();
+  for (const n of rosterNames) {
+    const k = normKey(n);
+    if (k) teamByName.set(k, "in_house");
+  }
   for (const cell of partArtistCells) {
     for (const n of cell.names) {
       const k = normKey(n);
-      // In-house wins. One agency row must not move an in-house artist like Dhara.
+      // Roster / in-house wins. One agency row must not move an in-house artist like Dhara.
       if (cell.team === "in_house" || !teamByName.has(k)) teamByName.set(k, cell.team);
     }
   }
@@ -611,8 +637,7 @@ export function buildAnimators(
 
   const seen = new Map<string, Animator>();
   for (const [k, team] of teamByName) {
-    // reconstruct a display name from the first occurrence
-    const display = displayNameFor(k, partArtistCells, qualityAnimators);
+    const display = displayNameFor(k, partArtistCells, qualityAnimators, rosterNames);
     if (!display) continue;
     seen.set(k, {
       id: `a:${slug(display)}`,
@@ -628,8 +653,11 @@ export function buildAnimators(
 function displayNameFor(
   key: string,
   partArtistCells: { names: string[] }[],
-  qualityAnimators: string[]
+  qualityAnimators: string[],
+  rosterNames: string[]
 ): string | null {
+  const fromRoster = rosterNames.find((n) => normKey(n) === key);
+  if (fromRoster) return fromRoster;
   for (const cell of partArtistCells) {
     const hit = cell.names.find((n) => normKey(n) === key);
     if (hit) return hit;

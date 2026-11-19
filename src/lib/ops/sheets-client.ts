@@ -58,9 +58,13 @@ export async function batchGet(
 
 // ── Cell parsers ────────────────────────────────────────────────────────────
 
+/** A broken formula cell (#REF!, #N/A, etc.) — never a real value. */
+const SHEET_ERROR = /^#(REF|N\/A|VALUE|DIV\/0|NAME|NULL|NUM)!?\??$/i;
+
 export function text(v: unknown): string | null {
   const s = String(v ?? "").trim();
-  return s.length ? s : null;
+  if (!s.length || SHEET_ERROR.test(s)) return null;
+  return s;
 }
 
 /** "8,150" / "132" → number; blank/garbage → null. */
