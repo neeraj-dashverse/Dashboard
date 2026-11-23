@@ -21,6 +21,7 @@ export function AskBoard() {
   const nextId = useMemo(() => ({ n: 1 }), []);
   const history = useRef<{ question: string; answer: string }[]>([]);
   const lastIntent = useRef<AskIntent | null>(null);
+  const lastPeople = useRef<string[]>([]);
 
   const ideas = useMemo(
     () => [
@@ -42,13 +43,16 @@ export function AskBoard() {
       setFocus(null);
       history.current = [];
       lastIntent.current = null;
+      lastPeople.current = [];
     }
     const id = nextId.n++;
     setQuestion("");
     setTurns((current) => [...current, { id, question: next, reply: null, waiting: true }]);
-    const local = answerOps(snap, next, pick, remembered, lastIntent.current);
+    const local = answerOps(snap, next, pick, remembered, lastIntent.current, lastPeople.current);
     if (local.focus) setFocus(local.focus);
     if (local.intent) lastIntent.current = local.intent;
+    if (local.people?.length) lastPeople.current = local.people;
+    else if (local.focus?.kind === "person") lastPeople.current = [local.focus.id];
     if (local.choices?.length) {
       setTurns((current) => current.map((turn) => (turn.id === id ? { ...turn, reply: local, waiting: false } : turn)));
       return;
@@ -235,6 +239,7 @@ export function AskBoard() {
                 setFocus(null);
                 history.current = [];
                 lastIntent.current = null;
+                lastPeople.current = [];
                 setQuestion("");
               }}
               className="rounded-full border border-white/[0.12] px-3 py-1.5 text-[12px] font-semibold text-slate-300 hover:text-white"

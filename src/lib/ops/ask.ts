@@ -78,6 +78,8 @@ export type AskReply = {
   focus?: AskChoice;
   /** So a follow-up like "what about Dhara?" can reuse the same kind of answer. */
   intent?: AskIntent;
+  /** Artists this answer was about, so "each of them" can reuse the list. */
+  people?: string[];
 };
 
 function norm(value: string): string {
@@ -117,14 +119,24 @@ function uniqueNames(snap: OpsSnapshot): string[] {
 }
 
 function peopleInQuestion(snap: OpsSnapshot, question: string): string[] {
-  const matched = uniqueNames(snap).filter((name) => mentioned(question, name));
+  const scored = uniqueNames(snap)
+    .map((name) => ({ name, score: Math.max(nameScore(question, name), mentioned(question, name) ? 100 : 0) }))
+    .filter((row) => row.score >= 70)
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+  const matched = scored.map((row) => row.name);
   return matched.filter((name) => {
     const key = norm(name);
     return !matched.some((other) => {
       const longer = norm(other);
-      return longer.length > key.length && longer.startsWith(`${key} `) && norm(question).includes(longer);
+      return longer !== key && longer.startsWith(`${key} `);
     });
   });
+}
+
+function refersToListedPeople(question: string): boolean {
+  return /\b(each|all)\b.{0,24}\b(artist|person|name|them|one)|\babove mentioned\b|\bnames? i (have )?given\b|\bthose (names|artists|people)\b|\bthe (same )?names\b/i.test(
+    question
+  );
 }
 
 function hasParts(snap: OpsSnapshot, promo: Promo, openOnly: boolean): boolean {
@@ -948,25 +960,78 @@ function capacityReply(snap: OpsSnapshot): AskReply {
   };
 }
 
+function coveringLine(snap: OpsSnapshot, name: string): string {
+  const profile = durationProfile(snap, name);
+  if (profile.totalRangedDays === 0) return `${name}: no Duration worked/day rows yet.`;
+  const trendText =
+    profile.trend === "up"
+      ? " Recent days have moved to a more productive range."
+      : profile.trend === "down"
+        ? " Recent days have moved to a less productive range."
+        : "";
+  return `${name}: ${typicalRangeLine(profile)}${trendText}`;
+}
+
+function productivityPeopleReply(snap: OpsSnapshot, names: string[]): AskReply {
+  const lines = names.map((name) => coveringLine(snap, name));
+  const tableRows = names.map((name) => {
+    const profile = durationProfile(snap, name);
+    return [
+      name,
+      profile.typicalRange
+        ? `${DURATION_WORKED_BUCKETS[profile.typicalRange].label} (${DURATION_WORKED_BUCKETS[profile.typicalRange].tier})`
+        : "—",
+      String(profile.totalRangedDays),
+      ...DURATION_BUCKET_ORDER.map((bucket) => `${profile.counts[bucket]}`),
+    ];
+  });
+  return {
+    heading: names.length === 1 ? names[0] : "Productivity",
+    lines,
+    tables: [
+      {
+        title: "Duration worked/day — how much they cover each day",
+        columns: ["Artist", "Typical day", "Days", "<3 min", "3-5 min", "5-7 min", ">7 min"],
+        rows: tableRows,
+      },
+    ],
+    intent: "productivity",
+    people: names,
+    focus: names.length === 1 ? { kind: "person", id: names[0], label: names[0] } : undefined,
+  };
+}
+
+function peopleReply(snap: OpsSnapshot, names: string[], intent: AskIntent): AskReply {
+  if (intent === "productivity") return productivityPeopleReply(snap, names);
+  if (names.length === 1) {
+    return { ...replyFor(snap, { kind: "person", id: names[0], label: names[0] }, "", intent), people: names };
+  }
+  const personIntent: AskIntent = intent.startsWith("person") ? intent : "person_full";
+  const lines: string[] = [];
+  const tables: AskTable[] = [];
+  for (const name of names) {
+    const answered = answerPerson(snap, name, personIntent);
+    lines.push(`${name}: ${answered.lines.join(" ")}`);
+    for (const table of answered.tables ?? []) {
+      tables.push({ ...table, title: `${name} · ${table.title ?? "Details"}` });
+    }
+  }
+  return {
+    heading: names.join(", "),
+    lines,
+    tables: tables.length ? tables : undefined,
+    intent: personIntent,
+    people: names,
+  };
+}
+
 function productivityAllReply(snap: OpsSnapshot): AskReply {
   const names = animationPeople(snap).map((person) => person.name);
   const ranked = durationRanking(snap).filter((row) => names.some((name) => norm(name) === norm(row.name)));
-  const lines = ranked.length
-    ? ranked.map((row) => typicalRangeLine(row))
-    : ["No Duration worked/day rows for in-house animators yet."];
-  const tableRows = ranked.map((row) => [
-    row.name,
-    row.typicalRange ? `${DURATION_WORKED_BUCKETS[row.typicalRange].label} (${DURATION_WORKED_BUCKETS[row.typicalRange].tier})` : "—",
-    ...DURATION_BUCKET_ORDER.map((bucket) => `${row.counts[bucket]}`),
-  ]);
-  return {
-    heading: "Productivity by artist",
-    lines: lines.map((line, i) => `${ranked[i]?.name}: ${line}`),
-    tables: tableRows.length
-      ? [{ title: "Duration worked/day", columns: ["Artist", "Typical", "<3 min", "3-5 min", "5-7 min", ">7 min"], rows: tableRows }]
-      : undefined,
-    intent: "productivity",
-  };
+  return productivityPeopleReply(
+    snap,
+    ranked.length ? ranked.map((row) => row.name) : names
+  );
 }
 
 function isoDiffDays(start: string, end: string, snap: OpsSnapshot): number {
@@ -1062,6 +1127,7 @@ function replyFor(snap: OpsSnapshot, choice: AskChoice, question = "", intent: A
       tables: answered.tables,
       focus: choice,
       intent: personIntent,
+      people: [choice.id],
     };
   }
   const promo = snap.promos.find((item) => item.id === choice.id);
@@ -1097,7 +1163,11 @@ function detectIntent(question: string, lastIntent?: AskIntent | null): AskInten
     return "avg_promo_time";
   }
   if (/\btake new promo|\bnew promos?\b|\bcapacity\b|\bwho can take\b/.test(q)) return "capacity";
-  if (/\bproductiv|\btypical range\b|\bduration worked\b|\bwho (is |are )?(more |most )?productive\b/.test(q)) {
+  if (
+    /\bproductiv|\btypical range\b|\bduration worked\b|\beach day\b.{0,40}\bcover|\bhow muchj?\b.{0,24}\bcover|\bwho (is |are )?(more |most )?productive\b/.test(
+      q
+    )
+  ) {
     return "productivity";
   }
   if (/\bquick status\b|\bcurrent promo|\bwhat( is|'s)? open\b|\bstatus of (the )?(current )?promos?\b/.test(q)) {
@@ -1160,7 +1230,8 @@ export function answerOps(
   question: string,
   pick?: AskChoice,
   follow?: AskChoice,
-  lastIntent?: AskIntent | null
+  lastIntent?: AskIntent | null,
+  lastPeople?: string[]
 ): AskReply {
   const asked = question.trim();
   if (!asked && !pick) {
@@ -1169,33 +1240,43 @@ export function answerOps(
   const intent = detectIntent(asked, lastIntent);
   if (pick) return replyFor(snap, pick, asked, intent);
 
-  if (TEAM_INTENTS.includes(intent)) {
-    const named = peopleInQuestion(snap, asked)[0];
-    if (named && (intent === "productivity" || PERSON_INTENTS.includes(intent))) {
-      return replyFor(snap, { kind: "person", id: named, label: named }, asked, intent === "productivity" ? "productivity" : intent);
-    }
-    return teamReply(snap, intent);
+  let named = peopleInQuestion(snap, asked);
+  if (!named.length && refersToListedPeople(asked) && lastPeople?.length) named = lastPeople;
+
+  const personLike =
+    intent === "productivity" || PERSON_INTENTS.includes(intent) || intent === "person_full";
+  if (named.length >= 1 && (personLike || !TEAM_INTENTS.includes(intent))) {
+    return peopleReply(snap, named, personLike ? intent : "person_full");
   }
+
+  if (TEAM_INTENTS.includes(intent)) return teamReply(snap, intent);
 
   const ranked = rankedChoices(snap, asked);
   const best = ranked[0];
   const followUp = /\b(she|he|him|her|their|they|them|that|this|same|also|too|again|his|its|it's|what about|how about)\b/i.test(
     asked
   );
-  const namedPerson = peopleInQuestion(snap, asked)[0] ?? (best?.choice.kind === "person" && best.score >= 70 ? best.choice.id : undefined);
-
-  if (namedPerson) {
-    return replyFor(snap, { kind: "person", id: namedPerson, label: namedPerson }, asked, intent);
-  }
-  if (follow && followUp) return replyFor(snap, follow, asked, intent);
+  if (follow && followUp) return { ...replyFor(snap, follow, asked, intent), people: follow.kind === "person" ? [follow.id] : lastPeople };
 
   if (best && best.choice.kind === "promo" && best.score >= 70) {
     const promoIntent: AskIntent = intent === "promo_close" || intent === "delivery" ? "promo_close" : "promo_status";
     return replyFor(snap, best.choice, asked, promoIntent);
   }
   if (!best) {
+    if (lastPeople?.length && (refersToListedPeople(asked) || followUp)) {
+      return peopleReply(snap, lastPeople, lastIntent && personLike ? lastIntent : "person_full");
+    }
     if (intent === "sheets") return teamReply(snap, "sheets");
-    return teamReply(snap, "open_promos");
+    if (TEAM_INTENTS.includes(intent)) return teamReply(snap, intent);
+    return { heading: "Ask about the sheets", lines: ["Name the artists or the promo."], intent };
+  }
+  const peopleHits = ranked.filter((item) => item.choice.kind === "person" && item.score >= 70);
+  if (peopleHits.length >= 2) {
+    return peopleReply(
+      snap,
+      peopleHits.map((item) => item.choice.id),
+      personLike ? intent : "person_full"
+    );
   }
   const close = ranked.filter((item) => item.score >= best.score - 12);
   const exact = close.filter((item) => item.score >= 100);
@@ -1204,10 +1285,11 @@ export function answerOps(
     heading: "Which one?",
     lines: [
       exact.length > 1
-        ? "More than one promo or person matches. Select the one you mean."
+        ? "More than one promo matches. Select the one you mean."
         : `Nothing matches that spelling exactly. Select the closest: ${close[0]?.choice.label ?? ""}.`,
     ],
     choices: (exact.length > 1 ? exact : close).slice(0, 6).map((item) => item.choice),
     intent,
+    people: lastPeople,
   };
 }

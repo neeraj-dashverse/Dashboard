@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     intent?: string;
   } | null;
   const question = (body?.question ?? "").trim().slice(0, 1000);
-  const facts = (body?.facts ?? "").trim().slice(0, 8000);
+  const facts = (body?.facts ?? "").trim().slice(0, 24000);
   const history = (body?.history ?? []).slice(-6);
   const intent = (body?.intent ?? "").trim();
   const key = process.env.GEMINI_API_KEY;
@@ -28,6 +28,9 @@ export async function POST(request: Request) {
     "You pass information to people who already run this work. They know the sheets, the stages, and the process. Do not explain any of that.",
     "Use only the facts below. Do not invent dates, names, ratings, or durations.",
     intent ? `This question is about: ${intent}. Answer that, and only that, from the facts.` : "",
+    "Answer the latest question. Do not switch the topic to who is open, who is plotted, or current promos unless the question asks that.",
+    "If the question names several artists, answer every named artist. Never ask which one, and never drop a name.",
+    "If they ask productivity or how much each day they cover, use Duration worked/day (less than 3 / 3-5 / 5-7 / more than 7 min). One short line per artist.",
     "If the facts give a list of names or promos, repeat the actual names. Never summarize a list to 'everyone', 'all', 'most', or 'the team'.",
     "Availability answers must keep four buckets if present: free for new work, on leave today, still plotted, should-be-free/overdue.",
     "Do not drop a plotted person when saying who is free.",
@@ -46,27 +49,31 @@ export async function POST(request: Request) {
     .filter(Boolean)
     .join("\n");
 
+  const models = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(key)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 600 },
-        }),
-      }
-    );
-    if (!res.ok) return NextResponse.json({ summary: null });
-    const data = (await res.json()) as {
-      candidates?: { content?: { parts?: { text?: string }[] } }[];
-    };
-    const summary = data.candidates?.[0]?.content?.parts
-      ?.map((part) => part.text ?? "")
-      .join("")
-      .trim();
-    return NextResponse.json({ summary: summary || null });
+    for (const model of models) {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
+          }),
+        }
+      );
+      if (!res.ok) continue;
+      const data = (await res.json()) as {
+        candidates?: { content?: { parts?: { text?: string }[] } }[];
+      };
+      const summary = data.candidates?.[0]?.content?.parts
+        ?.map((part) => part.text ?? "")
+        .join("")
+        .trim();
+      if (summary) return NextResponse.json({ summary });
+    }
+    return NextResponse.json({ summary: null });
   } catch {
     return NextResponse.json({ summary: null });
   }
