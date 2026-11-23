@@ -8,6 +8,23 @@ import type { IncomingPromo } from "@/lib/ops/tasks";
 import { Kpi, SectionTitle } from "./ui";
 import { useOps } from "./OpsProvider";
 
+const SEEN_KEY = "ops-pocketfm-seen";
+
+function readSeen(): string[] | null {
+  try {
+    const raw = window.localStorage.getItem(SEEN_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSeen(ids: string[]): void {
+  window.localStorage.setItem(SEEN_KEY, JSON.stringify([...new Set(ids)]));
+}
+
 export function HomeBoard() {
   const { snap } = useOps();
   const [incoming, setIncoming] = useState<IncomingPromo[] | null>(null);
@@ -26,8 +43,18 @@ export function HomeBoard() {
       body: JSON.stringify({ knownIds: snap.promos.map((promo) => promo.id) }),
     })
       .then((res) => res.json())
-      .then((data: { incoming?: IncomingPromo[] }) => {
-        if (!cancelled) setIncoming(data.incoming ?? []);
+      .then((data: { incoming?: IncomingPromo[]; catalog?: string[] }) => {
+        if (cancelled) return;
+        const catalog = data.catalog ?? [];
+        const rows = data.incoming ?? [];
+        const stored = readSeen();
+        if (stored == null) {
+          writeSeen(catalog);
+          setIncoming([]);
+          return;
+        }
+        const seen = new Set(stored);
+        setIncoming(rows.filter((row) => !seen.has(row.id)));
       })
       .catch(() => {
         if (!cancelled) setIncoming([]);
@@ -36,6 +63,16 @@ export function HomeBoard() {
       cancelled = true;
     };
   }, [snap.promos, snap.live]);
+
+  function markSaw(id: string) {
+    writeSeen([...(readSeen() ?? []), id]);
+    setIncoming((current) => (current ?? []).filter((row) => row.id !== id));
+  }
+
+  function markAllSaw() {
+    writeSeen([...(readSeen() ?? []), ...(incoming ?? []).map((row) => row.id)]);
+    setIncoming([]);
+  }
 
   return (
     <div className="space-y-6">
@@ -120,15 +157,26 @@ export function HomeBoard() {
       <section className="space-y-2">
         <SectionTitle
           title="New promos on PocketFM"
-          hint="On the Master Sheet, not yet on Master Tracker"
+          hint="Only a newly added open row. Closed and old rows are ignored."
           count={incoming?.length}
         />
         {incoming == null ? (
           <Empty>Checking the Master Sheet…</Empty>
         ) : incoming.length === 0 ? (
-          <Empty>No new promo on the PocketFM sheet.</Empty>
+          <Empty>No new promo added since you last checked.</Empty>
         ) : (
           <ul className="space-y-2">
+            {incoming.length > 1 && (
+              <li className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={markAllSaw}
+                  className="rounded-md px-2 py-1 text-[11px] font-semibold text-slate-400 hover:text-white"
+                >
+                  Mark all as saw
+                </button>
+              </li>
+            )}
             {incoming.map((row) => (
               <li
                 key={row.id}
@@ -139,16 +187,26 @@ export function HomeBoard() {
                     {row.showName}
                     {row.promoName ? ` · ${row.promoName}` : ""}
                   </p>
-                  <p className="mt-0.5 text-[11px] text-slate-400">New on Dashverse↔PFM Master Sheet</p>
+                  <p className="mt-0.5 text-[11px] text-slate-400">New row on the PocketFM Master Sheet</p>
                 </div>
-                <a
-                  href={snap.source.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-md bg-white/[0.08] px-2.5 py-1 text-[11px] font-bold text-slate-200"
-                >
-                  Open sheet
-                </a>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <a
+                    href={snap.source.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-md bg-white/[0.08] px-2.5 py-1 text-[11px] font-bold text-slate-200"
+                  >
+                    Open sheet
+                  </a>
+                  <button
+                    type="button"
+                    title="Mark as saw"
+                    onClick={() => markSaw(row.id)}
+                    className="rounded-md border border-emerald-400/40 bg-emerald-400/15 px-2.5 py-1 text-[11px] font-bold text-emerald-200 hover:bg-emerald-400/25"
+                  >
+                    ✓ Saw
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

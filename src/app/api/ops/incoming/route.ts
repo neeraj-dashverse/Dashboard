@@ -6,6 +6,6 @@ export async function POST(request: Request) {
   const knownIds = Array.isArray(body?.knownIds)
     ? body.knownIds.filter((id): id is string => typeof id === "string")
     : [];
-  const incoming = await loadNewMasterPromos(knownIds);
-  return NextResponse.json({ incoming });
+  const data = await loadNewMasterPromos(knownIds);
+  return NextResponse.json(data);
 }

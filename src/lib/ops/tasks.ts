@@ -13,6 +13,8 @@ export type IncomingPromo = {
   id: string;
   showName: string;
   promoName: string;
+  stage?: string | null;
+  status?: string | null;
 };
 
 export type TaskGroup = "new" | "delay" | "match" | "writeback" | "nudge";
