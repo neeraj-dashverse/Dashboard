@@ -22,7 +22,7 @@ export function PipelineBoard() {
   const columns = STAGE_ORDER.filter((s) => s !== "delivered").map((stage) => {
     const parts = snap.parts
       .filter((p) => p.stage === stage)
-      .sort((a, b) => daysLate(b.plannedDate, snap.today) - daysLate(a.plannedDate, snap.today));
+      .sort((a, b) => daysLate(b.plannedDate, snap.today, snap) - daysLate(a.plannedDate, snap.today, snap));
     return { stage, parts };
   });
 
@@ -93,7 +93,7 @@ function StageColumn({ stage, parts }: { stage: Stage; parts: Part[] }) {
         )}
         {parts.map((part) => {
           const promo = snap.promos.find((p) => p.id === part.promoId);
-          const late = daysLate(part.plannedDate, snap.today);
+          const late = daysLate(part.plannedDate, snap.today, snap);
           return (
             <article
               key={part.id}

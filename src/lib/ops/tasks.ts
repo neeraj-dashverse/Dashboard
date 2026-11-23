@@ -100,7 +100,7 @@ export function buildTasks(snap: OpsSnapshot, incoming: IncomingPromo[]): TaskIt
   for (const row of plannerPreprodRows(snap)) {
     const planned = row.plannedDate;
     const closed = assetClosedDate(row.promo);
-    const lateDays = preProdDelayDays(row.promo, snap.today);
+    const lateDays = preProdDelayDays(row.promo, snap.today, snap);
     const overduePlan = row.planMarks.some((m) =>
       plannerCellOverdue(row, m.note, m.date, snap.today)
     );

@@ -91,7 +91,7 @@ export function PromoDetail({ promoId }: { promoId: string }) {
 
   const lengthSec =
     promo.finalAssetLengthSec ?? parts.reduce((s, p) => s + p.durationSec, 0);
-  const completeLate = daysLate(promo.completeDeliverable, snap.today);
+  const completeLate = daysLate(promo.completeDeliverable, snap.today, snap);
 
   return (
     <div className="space-y-5">
@@ -209,7 +209,7 @@ export function PromoDetail({ promoId }: { promoId: string }) {
       {/* Neeraj's Pre Production Tracker — fill here, not the sheet */}
       {(() => {
         const pp = promo.preProd;
-        const delay = preProdDelayDays(promo, snap.today);
+        const delay = preProdDelayDays(promo, snap.today, snap);
         const closedByAsset = assetClosedDate(promo);
         const suggested = assetsNeededBySuggestion(snap, promo);
         return (
@@ -649,7 +649,7 @@ export function PromoDetail({ promoId }: { promoId: string }) {
         ) : (
           <div className="space-y-2">
             {parts.map((partRow) => {
-              const late = daysLate(partRow.plannedDate, snap.today);
+              const late = daysLate(partRow.plannedDate, snap.today, snap);
               return (
                 <article
                   key={partRow.id}

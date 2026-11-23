@@ -529,7 +529,8 @@ export type OpsSnapshot = {
   /** Timeline sheet · Duration tab. One row per show + promo. */
   durations: PromoDuration[];
   /**
-   * Current month of the Attendence tab only. Older months stay on the Attendance log sheet.
+   * Current month from Attendence, plus named holiday days from the Attendance log
+   * (Diwali and similar) so the calendar and delay counts still see past holidays.
    */
   attendance: AttendanceDay[];
 };

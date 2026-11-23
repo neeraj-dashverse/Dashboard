@@ -8,7 +8,9 @@ import {
   calendarDelay,
   dayLanes,
   formatDmy,
+  holidayLabel,
   isHoliday,
+  orgHolidayRuns,
   type DelayMark,
   plannerDays,
   plannerPreprodRows,
@@ -17,7 +19,7 @@ import {
   type PlannerRow,
   type PlannerTab,
 } from "@/lib/ops/selectors";
-import type { Stage } from "@/lib/ops/types";
+import type { OpsSnapshot, Stage } from "@/lib/ops/types";
 import { PromoPlan } from "./PromoPlan";
 import { useOps } from "./OpsProvider";
 
@@ -158,6 +160,13 @@ export function PlannerBoard() {
     box.scrollLeft += elRect.left - boxRect.left - box.clientWidth / 2 + elRect.width / 2;
   }, [days, tab]);
 
+  const holidayRuns = useMemo(() => {
+    const first = days[0];
+    const last = days[days.length - 1];
+    if (!first || !last) return [];
+    return orgHolidayRuns(snap).filter((run) => run.end >= first && run.start <= last);
+  }, [snap, days]);
+
   const promoCount = new Set(rows.map((r) => r.promo.id)).size;
   const sheetPromos = useMemo(() => {
     const map = new Map<string, (typeof rows)[number]["promo"]>();
@@ -220,6 +229,21 @@ export function PlannerBoard() {
             {promoCount} ongoing promos
             {tab === "production" ? ` · ${rows.length} parts` : ""} · read-only from Sheets.
           </p>
+          {holidayRuns.length > 0 && (
+            <p className="mt-2 flex flex-wrap gap-1.5">
+              {holidayRuns.map((run) => (
+                <span
+                  key={`${run.start}-${run.label}`}
+                  className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[11px] font-semibold text-amber-100"
+                >
+                  {run.start === run.end
+                    ? formatDmy(run.start)
+                    : `${formatDmy(run.start)}–${formatDmy(run.end)}`}
+                  {` · ${run.label}`}
+                </span>
+              ))}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -369,11 +393,11 @@ export function PlannerBoard() {
             </span>
             <span className="flex items-center gap-1.5">
               <span className="rounded bg-red-600/80 px-1.5 py-0.5 font-semibold text-white">Extreme</span>
-              3 days or more
+              3 working days or more
             </span>
             <span className="flex items-center gap-1.5">
               <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-semibold text-amber-100">Holiday</span>
-              Sunday · 2nd Saturday
+              Sunday · 2nd Saturday · Attendence (Diwali, …)
             </span>
           </div>
         )}
@@ -388,6 +412,7 @@ export function PlannerBoard() {
           scrollerRef={scrollerRef}
           days={days}
           rows={rows}
+          snap={snap}
           snapToday={snap.today}
           tab={tab}
           fmtDay={fmtDay}
@@ -409,6 +434,7 @@ function Grid({
   scrollerRef,
   days,
   rows,
+  snap,
   snapToday,
   tab,
   fmtDay,
@@ -418,6 +444,7 @@ function Grid({
   scrollerRef: Ref<HTMLDivElement>;
   days: string[];
   rows: PlannerRow[];
+  snap: OpsSnapshot;
   snapToday: string;
   tab: PlannerTab;
   fmtDay: (iso: string) => { label: string; wd: string };
@@ -503,7 +530,8 @@ function Grid({
             {days.map((d) => {
               const f = fmtDay(d);
               const today = d === snapToday;
-              const holiday = isHoliday(d);
+              const holiday = isHoliday(d, snap);
+              const off = holidayLabel(d, snap);
               return (
                 <th
                   key={d}
@@ -520,7 +548,7 @@ function Grid({
                   <span
                     className={`ml-1.5 text-[10px] font-medium ${holiday ? "text-amber-200/80" : "text-slate-600"}`}
                   >
-                    {holiday ? "Holiday" : f.wd}
+                    {off ?? f.wd}
                   </span>
                 </th>
               );
@@ -542,7 +570,7 @@ function Grid({
                   ? "bg-red-600/75"
                   : mark === "late"
                     ? "bg-rose-400/40"
-                    : isHoliday(d)
+                    : isHoliday(d, snap)
                       ? "bg-[repeating-linear-gradient(135deg,rgba(245,158,11,0.07)_0_6px,transparent_6px_12px)]"
                       : d === snapToday
                         ? "bg-[#4361ee]/[0.06]"
@@ -677,11 +705,11 @@ function Grid({
                     Current status
                   </td>
                   {days.map((d) => {
-                    const holiday = isHoliday(d);
+                    const holiday = isHoliday(d, snap);
                     const lanes = dayLanes(r, d, snapToday, tab).filter(
                       (l) => !holiday || l.closed
                     );
-                    const mark = calendarDelay(r, d, snapToday, tab);
+                    const mark = calendarDelay(r, d, snapToday, tab, snap);
                     return (
                       <td key={d} className={dayClass(d, mark)}>
                         <div className="min-h-[28px] space-y-1">{lanes.map(laneChip)}</div>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { delayDays, findDuration, formatClock, formatDmy, formatDuration, STAGE_LABEL } from "@/lib/ops/selectors";
-import type { AssetTeamRow, Part, PreProdAssetRow, Promo, QualityReview } from "@/lib/ops/types";
+import type { AssetTeamRow, OpsSnapshot, Part, PreProdAssetRow, Promo, QualityReview } from "@/lib/ops/types";
 import { useOps } from "./OpsProvider";
 
 function duration(seconds: number | null | undefined): string {
@@ -113,7 +113,8 @@ export function RecordDetail({ promoId }: { promoId: string }) {
   const assetRows = assetStageRows(
     asset?.correctionsEndDate || asset?.endDate || pre?.closedDate,
     pre?.plannedDate,
-    snap.today
+    snap.today,
+    snap
   );
 
   return (
@@ -230,7 +231,7 @@ export function RecordDetail({ promoId }: { promoId: string }) {
                 </div>
                 {openParts.includes(part.partNo) && (
                   <div className="mt-3">
-                    <DateTable rows={partStageRows(part, plans, snap.today)} />
+                    <DateTable rows={partStageRows(part, plans, snap.today, snap)} />
                   </div>
                 )}
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -382,9 +383,10 @@ function planIso(
 function delayLabel(
   planned: string | null | undefined,
   closed: string | null | undefined,
-  today: string
+  today: string,
+  snap?: OpsSnapshot | null
 ): string {
-  const days = delayDays(planned, closed, today);
+  const days = delayDays(planned, closed, today, snap);
   if (days == null) return "—";
   return String(days);
 }
@@ -394,7 +396,8 @@ type StageDate = { key: string; stage: string; planned: string; closed: string; 
 function assetStageRows(
   assetEnd: string | null | undefined,
   assetPlanned: string | null | undefined,
-  today: string
+  today: string,
+  snap?: OpsSnapshot | null
 ): StageDate[] {
   const show = (value: string | null | undefined) => (value ? formatDmy(value) : "—");
   return [
@@ -403,7 +406,7 @@ function assetStageRows(
       stage: "Assets",
       planned: show(assetPlanned),
       closed: show(assetEnd),
-      delayed: delayLabel(assetPlanned, assetEnd, today),
+      delayed: delayLabel(assetPlanned, assetEnd, today, snap),
     },
   ];
 }
@@ -411,7 +414,8 @@ function assetStageRows(
 function partStageRows(
   part: Part,
   plans: { partNo: number; date: string; text: string }[],
-  today: string
+  today: string,
+  snap?: OpsSnapshot | null
 ): StageDate[] {
   const show = (value: string | null | undefined) => (value ? formatDmy(value) : "—");
   const rough = planIso(plans, part.partNo, /rough cut|first cut|first animation|first edit/i);
@@ -423,28 +427,28 @@ function partStageRows(
       stage: "Animation",
       planned: show(rough),
       closed: show(part.aniCloseDate),
-      delayed: delayLabel(rough, part.aniCloseDate, today),
+      delayed: delayLabel(rough, part.aniCloseDate, today, snap),
     },
     {
       key: "edit",
       stage: "Edit",
       planned: show(rough),
       closed: show(part.editCloseDate),
-      delayed: delayLabel(rough, part.editCloseDate, today),
+      delayed: delayLabel(rough, part.editCloseDate, today, snap),
     },
     {
       key: "cor",
       stage: "Correction",
       planned: show(finalCut),
       closed: show(part.correctionEndDate),
-      delayed: delayLabel(finalCut, part.correctionEndDate, today),
+      delayed: delayLabel(finalCut, part.correctionEndDate, today, snap),
     },
     {
       key: "sound",
       stage: "Sound",
       planned: show(sound),
       closed: show(part.soundEndDate),
-      delayed: delayLabel(sound, part.soundEndDate, today),
+      delayed: delayLabel(sound, part.soundEndDate, today, snap),
     },
     { key: "rough", stage: "Rough cut", planned: show(rough), closed: "—", delayed: "—" },
     { key: "final", stage: "Final cut", planned: show(finalCut), closed: "—", delayed: "—" },

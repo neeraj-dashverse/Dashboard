@@ -13,6 +13,8 @@ import {
   qualityForAnimator,
   STAGE_LABEL,
   teamGroups,
+  daysLate,
+  daysUntil as workingDaysUntil,
   type DurationProfile,
 } from "./selectors";
 import { DURATION_WORKED_BUCKETS } from "./sheet-registry";
@@ -91,10 +93,8 @@ function mentioned(question: string, name: string): boolean {
   return first.length >= 4 && hay.includes(` ${first} `);
 }
 
-function daysUntil(today: string, date: string): number {
-  const a = new Date(`${today}T00:00:00Z`).getTime();
-  const b = new Date(`${date}T00:00:00Z`).getTime();
-  return Math.round((b - a) / 86400000);
+function daysUntil(snap: OpsSnapshot, date: string): number {
+  return workingDaysUntil(date, snap.today, snap) ?? 0;
 }
 
 function uniqueNames(snap: OpsSnapshot): string[] {
@@ -777,7 +777,7 @@ function answerPromo(snap: OpsSnapshot, promo: Promo, question = ""): string[] {
   if (!last) {
     lines.push("The sheet has no plotted close date, so it does not say when this promo will finish.");
   } else if (last > snap.today) {
-    const left = daysUntil(snap.today, last);
+    const left = daysUntil(snap, last);
     lines.push(
       `The latest plotted date is ${formatDmy(last)}, ${left} day${left === 1 ? "" : "s"} from today. That is the close date on the sheet if the open parts finish on that plot.`
     );
@@ -929,7 +929,7 @@ function deliveryReply(snap: OpsSnapshot): AskReply {
         const title = row.promo.promoName ? `${row.promo.showName} · ${row.promo.promoName}` : row.promo.showName;
         if (!row.last) return `${title}: no plotted close date.`;
         if (row.overdue) return `${title}: should have closed on ${formatDmy(row.last)}, still open.`;
-        const left = daysUntil(snap.today, row.last);
+        const left = daysUntil(snap, row.last);
         return `${title}: plotted ${formatDmy(row.last)} (${left} day${left === 1 ? "" : "s"} left).`;
       })
     : ["No in-house open promos to deliver."];
@@ -969,10 +969,8 @@ function productivityAllReply(snap: OpsSnapshot): AskReply {
   };
 }
 
-function isoDiffDays(start: string, end: string): number {
-  const a = new Date(`${start}T00:00:00Z`).getTime();
-  const b = new Date(`${end}T00:00:00Z`).getTime();
-  return Math.round((b - a) / 86400000);
+function isoDiffDays(start: string, end: string, snap: OpsSnapshot): number {
+  return daysLate(start, end, snap);
 }
 
 function avgPromoTimeReply(snap: OpsSnapshot): AskReply {
@@ -993,7 +991,7 @@ function avgPromoTimeReply(snap: OpsSnapshot): AskReply {
       .filter((date): date is string => !!date)
       .sort();
     if (!starts.length || !ends.length) continue;
-    const days = isoDiffDays(starts[0], ends[ends.length - 1]);
+    const days = isoDiffDays(starts[0], ends[ends.length - 1], snap);
     if (days >= 0) durations.push(days);
   }
   if (!durations.length) {

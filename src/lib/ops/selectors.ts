@@ -39,11 +39,13 @@ export const STAGE_LABEL: Record<Stage, string> = {
   delivered: "Delivered",
 };
 
-export function daysLate(planned: string | null, today: string): number {
+export function daysLate(planned: string | null, today: string, snap?: OpsSnapshot | null): number {
   if (!planned || planned >= today) return 0;
-  const a = new Date(`${planned}T00:00:00Z`).getTime();
-  const b = new Date(`${today}T00:00:00Z`).getTime();
-  return Math.round((b - a) / 86400000);
+  let n = 0;
+  for (let d = addDaysIso(planned, 1); d <= today; d = addDaysIso(d, 1)) {
+    if (!isHoliday(d, snap)) n++;
+  }
+  return n;
 }
 
 /**
@@ -53,22 +55,27 @@ export function daysLate(planned: string | null, today: string): number {
 export function delayDays(
   planned: string | null | undefined,
   closed: string | null | undefined,
-  today: string
+  today: string,
+  snap?: OpsSnapshot | null
 ): number | null {
   const plan = toIsoLoose(planned);
   if (!plan) return null;
   const end = toIsoLoose(closed);
-  if (end) return end > plan ? daysLate(plan, end) : 0;
-  if (today > plan) return daysLate(plan, today);
+  if (end) return end > plan ? daysLate(plan, end, snap) : 0;
+  if (today > plan) return daysLate(plan, today, snap);
   return 0;
 }
 
-/** Days until a future date (0 if today, negative if past). */
-export function daysUntil(iso: string | null, today: string): number | null {
+/** Working days until a future date (0 if today, negative if past). Holidays are skipped. */
+export function daysUntil(iso: string | null, today: string, snap?: OpsSnapshot | null): number | null {
   if (!iso) return null;
-  const a = new Date(`${today}T00:00:00Z`).getTime();
-  const b = new Date(`${iso}T00:00:00Z`).getTime();
-  return Math.round((b - a) / 86400000);
+  if (iso === today) return 0;
+  if (iso < today) return -daysLate(iso, today, snap);
+  let n = 0;
+  for (let d = addDaysIso(today, 1); d <= iso; d = addDaysIso(d, 1)) {
+    if (!isHoliday(d, snap)) n++;
+  }
+  return n;
 }
 
 export function formatDuration(sec: number): string {
@@ -207,11 +214,15 @@ export type PromoRecord = {
   parts: PromoPartRecord[];
 };
 
-function daySpan(start: string | null | undefined, end: string | null | undefined): number | null {
+function daySpan(
+  start: string | null | undefined,
+  end: string | null | undefined,
+  snap?: OpsSnapshot | null
+): number | null {
   const a = toIsoLoose(start);
   const b = toIsoLoose(end);
   if (!a || !b || b < a) return null;
-  return daysLate(a, b);
+  return daysLate(a, b, snap);
 }
 
 /** Every promo on the tracker or production sheet, including closed ones. */
@@ -236,9 +247,10 @@ export function promoRecords(snap: OpsSnapshot): PromoRecord[] {
       .filter((name): name is string => !!name)
       .join(", ");
     const assetDays =
+      daySpan(asset?.startDate, asset?.correctionsEndDate || asset?.endDate, snap) ??
       asset?.totalDays ??
       asset?.productionDays ??
-      daySpan(asset?.startDate, asset?.correctionsEndDate || asset?.endDate);
+      null;
 
     const partRows: PromoPartRecord[] = parts.map((part) => {
       const closedOn =
@@ -251,8 +263,8 @@ export function promoRecords(snap: OpsSnapshot): PromoRecord[] {
         lengthSec: part.durationSec,
         workedSec: part.workedDurationSec,
         days:
-          part.days ??
-          daySpan(part.aniStartDate ?? part.plannedPlottedDate, closedOn),
+          daySpan(part.aniStartDate ?? part.plannedPlottedDate, closedOn, snap) ??
+          part.days,
         closedOn,
       };
     });
@@ -315,7 +327,7 @@ export function promoRecords(snap: OpsSnapshot): PromoRecord[] {
       animationStart: starts[0] ?? null,
       productionEnd: correctionEnds[correctionEnds.length - 1] ?? null,
       soundEnd: soundEnds[soundEnds.length - 1] ?? null,
-      days: daySpan(starts[0], ends[ends.length - 1]) ?? assetDays,
+      days: daySpan(starts[0], ends[ends.length - 1], snap) ?? assetDays,
       closedOn,
       parts: partRows,
     });
@@ -467,7 +479,7 @@ export function buildExceptions(snap: OpsSnapshot): ExceptionItem[] {
     if (part.stage === "delivered") continue;
     const promo = promoFor(snap, part.promoId);
     if (!promo) continue;
-    const late = daysLate(part.plannedDate, snap.today);
+    const late = daysLate(part.plannedDate, snap.today, snap);
     const minutes = part.durationSec / 60;
     const p0Boost = promo.priority === "P0" ? 1.4 : 1;
 
@@ -512,7 +524,7 @@ export function buildExceptions(snap: OpsSnapshot): ExceptionItem[] {
 
     // Milestone 1 — 5-min preview
     if (promo.fiveMinTimeline && promo.fiveMinTimeline <= snap.today) {
-      const late = daysLate(promo.fiveMinTimeline, snap.today);
+      const late = daysLate(promo.fiveMinTimeline, snap.today, snap);
       items.push({
         part: anchorPart,
         promo,
@@ -525,7 +537,7 @@ export function buildExceptions(snap: OpsSnapshot): ExceptionItem[] {
 
     // Milestone 2 — complete deliverable
     if (promo.completeDeliverable && promo.completeDeliverable <= snap.today) {
-      const late = daysLate(promo.completeDeliverable, snap.today);
+      const late = daysLate(promo.completeDeliverable, snap.today, snap);
       items.push({
         part: anchorPart,
         promo,
@@ -553,7 +565,7 @@ export function buildExceptions(snap: OpsSnapshot): ExceptionItem[] {
 export function funnelCounts(snap: OpsSnapshot): Array<{ stage: Stage; count: number; stuck: number }> {
   return STAGE_ORDER.map((stage) => {
     const inStage = snap.parts.filter((p) => p.stage === stage);
-    const stuck = inStage.filter((p) => daysLate(p.plannedDate, snap.today) >= 2 || p.blocked).length;
+    const stuck = inStage.filter((p) => daysLate(p.plannedDate, snap.today, snap) >= 2 || p.blocked).length;
     return { stage, count: inStage.length, stuck };
   });
 }
@@ -651,7 +663,8 @@ export function animatorProductivity(snap: OpsSnapshot): AnimatorProductivity[] 
           delayDays(
             cellPlanDate(snap, part.promoId, part.partNo, /rough cut|first cut|first animation|first edit/i),
             part.aniCloseDate,
-            snap.today
+            snap.today,
+            snap
           )
         )
         .filter((days): days is number => days != null);
@@ -1246,7 +1259,7 @@ export function teamGroups(snap: OpsSnapshot): TeamGroup[] {
       doing: currentDoing(row, snap.today, tab),
       plan: rel.plan,
       until: rel.until,
-      lateDays: rel.until && rel.until < snap.today ? daysLate(rel.until, snap.today) : 0,
+      lateDays: rel.until && rel.until < snap.today ? daysLate(rel.until, snap.today, snap) : 0,
     });
   };
 
@@ -1546,8 +1559,8 @@ function openPast(close: string | null | undefined, plan: string | null, day: st
   return true;
 }
 
-function delayLevel(plan: string, day: string): DelayMark {
-  return daysLate(plan, day) >= EXTREME_DELAY_DAYS ? "extreme" : "late";
+function delayLevel(plan: string, day: string, snap?: OpsSnapshot | null): DelayMark {
+  return daysLate(plan, day, snap) >= EXTREME_DELAY_DAYS ? "extreme" : "late";
 }
 
 /**
@@ -1559,14 +1572,16 @@ export function calendarDelay(
   row: PlannerRow,
   day: string,
   today: string,
-  tab: PlannerTab
+  tab: PlannerTab,
+  snap?: OpsSnapshot | null
 ): DelayMark {
   if (day > today) return "none";
+  if (isHoliday(day, snap)) return "none";
 
   if (tab === "preprod") {
     const plan = markDate(row, /asset/i) ?? row.plannedDate;
     const closed = assetClosedDate(row.promo);
-    return openPast(closed, plan, day) ? delayLevel(plan, day) : "none";
+    return openPast(closed, plan, day) ? delayLevel(plan, day, snap) : "none";
   }
 
   const part = row.part;
@@ -1577,19 +1592,19 @@ export function calendarDelay(
 
   if (/sound/.test(lane)) return "none";
   if (/correction/.test(lane)) {
-    return openPast(part.correctionEndDate, finalCut, day) ? delayLevel(finalCut, day) : "none";
+    return openPast(part.correctionEndDate, finalCut, day) ? delayLevel(finalCut, day, snap) : "none";
   }
   if (/edit/.test(lane)) {
-    return openPast(part.editCloseDate, rough, day) ? delayLevel(rough, day) : "none";
+    return openPast(part.editCloseDate, rough, day) ? delayLevel(rough, day, snap) : "none";
   }
   if (/plot|anim|planning|first/.test(lane)) {
-    return openPast(part.aniCloseDate, rough, day) ? delayLevel(rough, day) : "none";
+    return openPast(part.aniCloseDate, rough, day) ? delayLevel(rough, day, snap) : "none";
   }
 
   if (openPast(part.aniCloseDate, rough, day) || openPast(part.editCloseDate, rough, day)) {
-    return delayLevel(rough, day);
+    return delayLevel(rough, day, snap);
   }
-  if (openPast(part.correctionEndDate, finalCut, day)) return delayLevel(finalCut, day);
+  if (openPast(part.correctionEndDate, finalCut, day)) return delayLevel(finalCut, day, snap);
   return "none";
 }
 
@@ -1669,14 +1684,61 @@ export function plannerCellOverdue(row: PlannerRow, plan: string, date: string, 
   return false;
 }
 
-/** Extra off days (ISO). Sundays and the 2nd Saturday are already holidays. */
-const EXTRA_HOLIDAYS = new Set<string>([
-  // e.g. "2026-11-01",
-]);
+const namedHolidayCache = new WeakMap<OpsSnapshot, Map<string, string>>();
 
-/** Sunday, or the second Saturday of the month (date 8–14). */
-export function isHoliday(iso: string): boolean {
-  if (EXTRA_HOLIDAYS.has(iso)) return true;
+function prettyHolidayLabel(status: string): string {
+  const value = status.trim();
+  if (/^second\s*s/i.test(value) || /^2nd\s*sat/i.test(value)) return "2nd Saturday";
+  return value;
+}
+
+/**
+ * Dates the Attendence sheet marked as a holiday (Diwali, Sunday, …), not Working or Leave.
+ * Festival names beat a generic Sunday / Holiday label on the same date.
+ */
+export function namedHolidays(snap: OpsSnapshot): Map<string, string> {
+  const cached = namedHolidayCache.get(snap);
+  if (cached) return cached;
+  const named = new Map<string, string>();
+  const rank = (status: string) =>
+    /^(sunday|saturday|2nd saturday)$/i.test(status) ? 0 : /^holiday$/i.test(status) ? 1 : 2;
+  for (const day of snap.attendance ?? []) {
+    const status = prettyHolidayLabel(day.status);
+    if (!status || /@/.test(status) || /^working$/i.test(status) || /^leave$/i.test(status)) continue;
+    const prev = named.get(day.date);
+    if (!prev || rank(status) > rank(prev)) named.set(day.date, status);
+  }
+  namedHolidayCache.set(snap, named);
+  return named;
+}
+
+/** Consecutive named holidays, skipping weekly Sundays (those already show as Holiday). */
+export function orgHolidayRuns(snap: OpsSnapshot): { start: string; end: string; label: string }[] {
+  const named = namedHolidays(snap);
+  const runs: { start: string; end: string; label: string }[] = [];
+  for (const date of [...named.keys()].sort()) {
+    const label = named.get(date) ?? "";
+    if (/^sunday$/i.test(label)) continue;
+    const last = runs[runs.length - 1];
+    if (last && last.label === label && addDaysIso(last.end, 1) === date) last.end = date;
+    else runs.push({ start: date, end: date, label });
+  }
+  return runs;
+}
+
+/** Caption on a calendar holiday cell: "Diwali" from attendance, else "Holiday" for Sunday / 2nd Saturday. */
+export function holidayLabel(iso: string, snap?: OpsSnapshot | null): string | null {
+  if (snap) {
+    const named = namedHolidays(snap).get(iso);
+    if (named) return named;
+  }
+  if (!isHoliday(iso, snap)) return null;
+  return "Holiday";
+}
+
+/** Sunday, 2nd Saturday of the month, or a named holiday from the Attendence sheet (Diwali, …). */
+export function isHoliday(iso: string, snap?: OpsSnapshot | null): boolean {
+  if (snap && namedHolidays(snap).has(iso)) return true;
   const wd = new Date(`${iso}T00:00:00Z`).getUTCDay();
   if (wd === 0) return true;
   if (wd !== 6) return false;
@@ -1711,14 +1773,20 @@ export function plannerDays(snap: OpsSnapshot, tab: PlannerTab): string[] {
   for (const c of snap.plannerCells) {
     if (rows.some((r) => r.promo.id === c.promoId && r.partNo === c.partNo)) dates.add(c.date);
   }
+  const holidayDates = [...namedHolidays(snap).keys()].sort();
+  for (const d of holidayDates) dates.add(d);
   if (dates.size === 0 && starts.length === 0) {
     return enumerateDays(snap.today, addDaysIso(snap.today, 14));
   }
   const sorted = [...dates].sort();
-  const start = [...starts].sort()[0] ?? sorted[0] ?? snap.today;
+  let start = [...starts].sort()[0] ?? sorted[0] ?? snap.today;
   const afterStart = sorted.filter((d) => d >= start);
   let end = afterStart[afterStart.length - 1] ?? start;
   if (snap.today > end && snap.today >= start) end = snap.today;
+  const floor = addDaysIso(snap.today, -45);
+  for (const d of holidayDates) {
+    if (d >= floor && d <= end && d < start) start = d;
+  }
   if (end < start) end = start;
   return enumerateDays(start, addDaysIso(end, 1));
 }
@@ -1769,7 +1837,7 @@ export function buildNudges(snap: OpsSnapshot): OpsNudge[] {
     if (promo.completeDeliverable) {
       const due = promo.completeDeliverable;
       if (due <= horizon) {
-        const late = daysLate(due, snap.today);
+        const late = daysLate(due, snap.today, snap);
         push(
           "complete_due",
           late > 0
@@ -1785,7 +1853,7 @@ export function buildNudges(snap: OpsSnapshot): OpsNudge[] {
                 ? `Final delivery ${late}d late`
                 : due === snap.today
                   ? "Final delivery today"
-                  : `Final delivery in ${daysUntil(due, snap.today)}d`,
+                  : `Final delivery in ${daysUntil(due, snap.today, snap)}d`,
             audience: ["neeraj", "coordinator", "cps_lead"],
           }
         );
@@ -1796,7 +1864,7 @@ export function buildNudges(snap: OpsSnapshot): OpsNudge[] {
       if (part.promoId !== promo.id || part.stage === "delivered" || !part.deadline)
         continue;
       if (part.deadline > horizon) continue;
-      const late = daysLate(part.deadline, snap.today);
+      const late = daysLate(part.deadline, snap.today, snap);
       push(
         "part_deadline",
         `Part ${part.partNo} on ${label} deadline ${part.deadline}${
@@ -1810,7 +1878,7 @@ export function buildNudges(snap: OpsSnapshot): OpsNudge[] {
               ? `Part deadline ${late}d past`
               : part.deadline === snap.today
                 ? "Part deadline today"
-                : `Part deadline in ${daysUntil(part.deadline, snap.today)}d`,
+                : `Part deadline in ${daysUntil(part.deadline, snap.today, snap)}d`,
           audience: ["coordinator", "neeraj"],
         }
       );
@@ -1926,7 +1994,7 @@ export function buildNudges(snap: OpsSnapshot): OpsNudge[] {
         );
       }
       const closedOn = assetClosedDate(promo);
-      const delay = preProdDelayDays(promo, snap.today);
+      const delay = preProdDelayDays(promo, snap.today, snap);
       if (!closedOn && (delay > 0 || pp.delayFlagged) && pp.plannedDate) {
         push(
           "assets_delay",
@@ -1962,13 +2030,13 @@ export function buildNudges(snap: OpsSnapshot): OpsNudge[] {
     const last = promo.lastTrackerUpdateAt;
     if (
       open &&
-      (!last || daysLate(last, snap.today) >= STALE_DAYS) &&
+      (!last || daysLate(last, snap.today, snap) >= STALE_DAYS) &&
       promo.trackerStatus === "WIP"
     ) {
       push(
         "stale_status",
         `Check in on ${label} — no tracker update in ${
-          last ? `${daysLate(last, snap.today)}d` : "a while"
+          last ? `${daysLate(last, snap.today, snap)}d` : "a while"
         }. Still WIP?`,
         "medium",
         {
@@ -2035,12 +2103,12 @@ export function assetClosedDate(promo: Promo): string | null {
  * Days late vs Neeraj's planned close (Pre Production Tracker), but only while
  * the asset team hasn't actually closed it (AC empty). Once AC is set, 0.
  */
-export function preProdDelayDays(promo: Promo, today: string): number {
+export function preProdDelayDays(promo: Promo, today: string, snap?: OpsSnapshot | null): number {
   const pp = promo.preProd;
   if (promo.trackerStatus === "Closed") return 0; // promo wrapped up
   if (!pp?.plannedDate || pp.status === "Done" || pp.closedDate) return 0;
   if (assetClosedDate(promo)) return 0; // asset team has actually closed it
-  return daysLate(pp.plannedDate, today);
+  return daysLate(pp.plannedDate, today, snap);
 }
 
 /**

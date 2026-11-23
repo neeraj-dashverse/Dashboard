@@ -99,6 +99,9 @@ export function toIsoDate(v: unknown, order: "dmy" | "mdy" = "dmy"): string | nu
   const s = String(v ?? "").trim();
   if (!s) return null;
 
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
   const numeric = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
   if (numeric) {
     let [, a, b, y] = numeric;

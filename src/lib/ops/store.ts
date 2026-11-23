@@ -10,6 +10,7 @@ import {
   MOCK_TODAY,
   MOCK_WORKING_SOURCE,
 } from "./mock-data";
+import { daysLate } from "./selectors";
 import type { OpsAction, OpsSnapshot, PendingWrite } from "./types";
 
 /**
@@ -397,9 +398,7 @@ export function applyAction(action: OpsAction, opts: ApplyOpts = {}): OpsSnapsho
         if (action.soundEndDate !== undefined) part.soundEndDate = action.soundEndDate;
         part.plannedDate = part.deadline ?? part.plannedPlottedDate;
         if (part.aniStartDate && part.aniCloseDate) {
-          const a = new Date(`${part.aniStartDate}T00:00:00Z`).getTime();
-          const b = new Date(`${part.aniCloseDate}T00:00:00Z`).getTime();
-          part.days = Math.max(0, Math.round((b - a) / 86400000));
+          part.days = daysLate(part.aniStartDate, part.aniCloseDate, snapshot);
         }
         q("Production Tracker · Stage dates");
       }

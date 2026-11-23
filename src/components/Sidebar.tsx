@@ -6,6 +6,7 @@ import { useOps } from "./ops/OpsProvider";
 
 const navItems = [
   { href: "/ask", label: "Ask AI", icon: "✦" },
+  { href: "/home", label: "Home", icon: "⌂" },
   { href: "/planner", label: "Calendar", icon: "▦" },
   { href: "/team", label: "Team", icon: "☰" },
   { href: "/productivity", label: "Productivity", icon: "◈" },

@@ -36,6 +36,12 @@ function dayKey(name: string, date: string): string {
   return `${personKey(name)}|${date}`;
 }
 
+/** Working and Leave are personal; anything else on Attendence is an org holiday (Diwali, Sunday, …). */
+function isNamedHolidayStatus(status: string | null | undefined): status is string {
+  const value = (status ?? "").trim();
+  return Boolean(value) && !/^working$/i.test(value) && !/^leave$/i.test(value);
+}
+
 export function parseAttendance(rows: Grid): AttendanceDay[] {
   const header = rows[0] ?? [];
   const dates = header.map((cell, index) => ({ index, date: toIsoDate(cell, "dmy") }));
@@ -89,58 +95,78 @@ async function read(range: string): Promise<Grid> {
   return (res.data.values as Grid | undefined) ?? [];
 }
 
-/** Copy this month into the Attendance log, then return only this month for the dashboard. */
+/** Live Attendence first. Archiving to the log must not wipe Diwali / Sunday if the write fails. */
 export async function syncAttendance(): Promise<AttendanceDay[]> {
-  await ensureLog();
-  const [live, log] = await Promise.all([
-    read(`'${LIVE_TAB}'!A1:AZ200`),
-    read(`'${LOG_TAB}'!A:C`),
-  ]);
+  const live = await read(`'${LIVE_TAB}'!A1:CZ200`);
   const current = parseAttendance(live);
-  const saved = new Map<string, { row: number; status: string }>();
-  for (let i = 1; i < log.length; i++) {
-    const name = text(log[i][0]);
-    const date = text(log[i][1]);
-    const status = text(log[i][2]);
-    if (!name || !date || !status) continue;
-    saved.set(dayKey(name, date), { row: i + 1, status });
-  }
-
-  const appends: string[][] = [];
-  const updates: { row: number; status: string }[] = [];
-  for (const day of current) {
-    const prev = saved.get(dayKey(day.name, day.date));
-    if (!prev) {
-      appends.push([day.name, day.date, day.status]);
-      continue;
+  try {
+    await ensureLog();
+    const log = await read(`'${LOG_TAB}'!A:C`);
+    const saved = new Map<string, { row: number; status: string }>();
+    for (let i = 1; i < log.length; i++) {
+      const name = text(log[i][0]);
+      const date = text(log[i][1]);
+      const status = text(log[i][2]);
+      if (!name || !date || !status) continue;
+      saved.set(dayKey(name, date), { row: i + 1, status });
     }
-    if (prev.status !== day.status) updates.push({ row: prev.row, status: day.status });
-  }
 
-  const api = sheets();
-  if (updates.length) {
-    await api.spreadsheets.values.batchUpdate({
-      spreadsheetId: SHEET_ID,
-      requestBody: {
+    const appends: string[][] = [];
+    const updates: { row: number; status: string }[] = [];
+    for (const day of current) {
+      const prev = saved.get(dayKey(day.name, day.date));
+      if (!prev) {
+        appends.push([day.name, day.date, day.status]);
+        continue;
+      }
+      if (prev.status !== day.status) updates.push({ row: prev.row, status: day.status });
+    }
+
+    const api = sheets();
+    if (updates.length) {
+      await api.spreadsheets.values.batchUpdate({
+        spreadsheetId: SHEET_ID,
+        requestBody: {
+          valueInputOption: "RAW",
+          data: updates.map((update) => ({
+            range: `'${LOG_TAB}'!C${update.row}`,
+            values: [[update.status]],
+          })),
+        },
+      });
+    }
+    if (appends.length) {
+      await api.spreadsheets.values.append({
+        spreadsheetId: SHEET_ID,
+        range: `'${LOG_TAB}'!A1:C1`,
         valueInputOption: "RAW",
-        data: updates.map((update) => ({
-          range: `'${LOG_TAB}'!C${update.row}`,
-          values: [[update.status]],
-        })),
-      },
-    });
-  }
-  if (appends.length) {
-    await api.spreadsheets.values.append({
-      spreadsheetId: SHEET_ID,
-      range: `'${LOG_TAB}'!A1:C1`,
-      valueInputOption: "RAW",
-      insertDataOption: "INSERT_ROWS",
-      requestBody: { values: appends },
-    });
-  }
+        insertDataOption: "INSERT_ROWS",
+        requestBody: { values: appends },
+      });
+    }
 
-  return current;
+    const liveKeys = new Set(current.map((day) => dayKey(day.name, day.date)));
+    const holidaysFromLog: AttendanceDay[] = [];
+    for (const row of log.slice(1)) {
+      const name = text(row[0]);
+      const date = logDate(row[1]);
+      const status = text(row[2]);
+      if (!name || !date || !isNamedHolidayStatus(status)) continue;
+      if (liveKeys.has(dayKey(name, date))) continue;
+      holidaysFromLog.push({ name, date, status });
+    }
+    return [...current, ...holidaysFromLog];
+  } catch (err) {
+    console.error("[ops] Attendance log archive failed:", err);
+    return current;
+  }
+}
+
+function logDate(value: unknown): string | null {
+  const raw = text(value);
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  return toIsoDate(raw);
 }
 
 function nextIso(iso: string): string {
