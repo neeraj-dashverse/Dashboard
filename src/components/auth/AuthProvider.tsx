@@ -20,6 +20,26 @@ export function AuthProvider({
 }) {
   useEffect(() => {
     if (email) rememberLoginEmail(email);
+    let supabase: ReturnType<typeof createBrowserSupabase>;
+    try {
+      supabase = createBrowserSupabase();
+    } catch {
+      return;
+    }
+    supabase.auth.startAutoRefresh();
+    void supabase.auth.getSession();
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user?.email) rememberLoginEmail(session.user.email);
+    });
+    const onFocus = () => {
+      void supabase.auth.getSession();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      data.subscription.unsubscribe();
+      supabase.auth.stopAutoRefresh();
+      window.removeEventListener("focus", onFocus);
+    };
   }, [email]);
 
   const signOut = async () => {

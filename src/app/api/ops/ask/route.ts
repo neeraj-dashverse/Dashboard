@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   if (!key || !question || !facts) return NextResponse.json({ summary: null });
 
   let savedLeave = "";
-  if (/\bleave|attendance|available|who is working\b/i.test(question)) {
+  if (/\bon leave\b|\battendance\b|\bwho is working\b/i.test(question)) {
     savedLeave = await leaveHistoryText().catch(() => "");
   }
 
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     .filter(Boolean)
     .join("\n");
 
-  const models = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
+  const models = ["gemini-3.8-flash", "gemini-3.5-flash-lite"];
   try {
     for (const model of models) {
       const res = await fetch(
@@ -61,6 +61,7 @@ export async function POST(request: Request) {
             contents: [{ role: "user", parts: [{ text: prompt }] }],
             generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
           }),
+          signal: AbortSignal.timeout(8000),
         }
       );
       if (!res.ok) continue;

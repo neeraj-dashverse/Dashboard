@@ -15,6 +15,17 @@ export default function LoginPage() {
     const params = new URLSearchParams(window.location.search);
     const callbackError = params.get("error");
     if (callbackError) setError(callbackError);
+    try {
+      const supabase = createBrowserSupabase();
+      void supabase.auth.getSession().then(({ data }) => {
+        if (data.session) {
+          const next = params.get("next");
+          window.location.replace(next && next.startsWith("/") ? next : "/");
+        }
+      });
+    } catch {
+      /* Env missing — stay on the form. */
+    }
   }, []);
 
   async function sendLink(e: React.FormEvent) {

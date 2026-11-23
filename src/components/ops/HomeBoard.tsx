@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { homeDelays, homeFree, homeLeaves } from "@/lib/ops/home";
+import { homeDelays, homeFree, homeLeaves, type HomeFree } from "@/lib/ops/home";
+import { loadOutsidePlots, saveOutsidePlots, plotForName, type OutsidePlot } from "@/lib/ops/outside-plots";
 import { formatDmy } from "@/lib/ops/selectors";
 import type { IncomingPromo } from "@/lib/ops/tasks";
 import { Kpi, SectionTitle } from "./ui";
@@ -28,12 +29,36 @@ function writeSeen(ids: string[]): void {
 export function HomeBoard() {
   const { snap } = useOps();
   const [incoming, setIncoming] = useState<IncomingPromo[] | null>(null);
+  const [plots, setPlots] = useState<OutsidePlot[]>([]);
+  const [form, setForm] = useState({ name: "", until: "", remark: "" });
+  const [formError, setFormError] = useState("");
   const leaves = useMemo(() => homeLeaves(snap), [snap]);
   const delays = useMemo(() => homeDelays(snap), [snap]);
-  const free = useMemo(() => homeFree(snap), [snap]);
+  const sheetFree = useMemo(() => homeFree(snap), [snap]);
+  const followUp = useMemo(
+    () => plots.filter((plot) => plot.until <= snap.today),
+    [plots, snap.today]
+  );
+  const free = useMemo(() => {
+    return sheetFree
+      .map((row) => overlayPlot(row, plots, snap.today))
+      .filter((row): row is HomeFree => row != null);
+  }, [sheetFree, plots, snap.today]);
+  const artistNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const animator of snap.animators) {
+      if (animator.team !== "agency" && animator.name.trim()) names.add(animator.name.trim());
+    }
+    for (const row of sheetFree) names.add(row.name);
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [snap.animators, sheetFree]);
   const running = delays.filter((row) => row.bucket === "running");
   const upcoming = delays.filter((row) => row.bucket === "upcoming");
   const freeNow = free.filter((row) => row.kind === "free").length;
+
+  useEffect(() => {
+    setPlots(loadOutsidePlots());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +99,42 @@ export function HomeBoard() {
     setIncoming([]);
   }
 
+  function persistPlots(next: OutsidePlot[]) {
+    setPlots(next);
+    saveOutsidePlots(next);
+  }
+
+  function savePlot() {
+    const name = form.name.trim();
+    const remark = form.remark.trim();
+    if (!name || !form.until || !remark) {
+      setFormError("Artist, other show, and till-when are all needed.");
+      return;
+    }
+    const next: OutsidePlot = {
+      id: `${name.toLowerCase()}|${form.until}|${Date.now()}`,
+      name,
+      until: form.until,
+      remark,
+    };
+    persistPlots([...plots.filter((plot) => plot.name.trim().toLowerCase() !== name.toLowerCase()), next]);
+    setForm({ name: "", until: "", remark: "" });
+    setFormError("");
+  }
+
+  function fillPlot(name: string, until?: string | null, remark?: string) {
+    setFormError("");
+    setForm({
+      name,
+      until: until && until > snap.today ? until : snap.today,
+      remark: remark ?? plotForName(plots, name)?.remark ?? "",
+    });
+  }
+
+  function clearPlot(id: string) {
+    persistPlots(plots.filter((plot) => plot.id !== id));
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -96,6 +157,9 @@ export function HomeBoard() {
         />
         <Kpi label="Delayed" value={delays.length} tone={delays.length ? "text-rose-300" : "text-white"} />
         <Kpi label="Free now" value={freeNow} tone="text-emerald-300" />
+        {followUp.length > 0 && (
+          <Kpi label="Follow up" value={followUp.length} tone="text-amber-300" />
+        )}
       </div>
 
       <section className="space-y-2">
@@ -219,12 +283,105 @@ export function HomeBoard() {
         <DelayGroup title="Upcoming" rows={upcoming} />
       </section>
 
+      {followUp.length > 0 && (
+        <section className="space-y-2">
+          <SectionTitle
+            title="Follow up — should be free"
+            hint="Other in-house plot date has passed. Ask the team if they are free."
+            count={followUp.length}
+          />
+          <ul className="space-y-2">
+            {followUp.map((plot) => (
+              <li
+                key={plot.id}
+                className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-3"
+              >
+                <div>
+                  <p className="text-[13px] font-semibold text-white">{plot.name}</p>
+                  <p className="mt-0.5 text-[12px] text-amber-100">
+                    Should be free since {formatDmy(plot.until)}
+                    {plot.remark ? ` · ${plot.remark}` : " · other in-house"}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => fillPlot(plot.name, plot.until, plot.remark)}
+                    className="rounded-md bg-white/[0.08] px-2.5 py-1 text-[11px] font-bold text-slate-200"
+                  >
+                    Still plotted
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => clearPlot(plot.id)}
+                    className="rounded-md border border-emerald-400/40 bg-emerald-400/15 px-2.5 py-1 text-[11px] font-bold text-emerald-200"
+                  >
+                    Free now
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section className="space-y-2">
         <SectionTitle
           title="Who is free"
-          hint="In-house animation. If they are on another show, plotted till that day"
+          hint="PocketFM only. If they are on another show that is not yours, mark it here."
           count={free.length}
         />
+        <div className="rounded-xl border border-[#4361ee]/35 bg-[#222738] px-4 py-4">
+          <p className="text-[13px] font-bold text-white">Plotted on another show</p>
+          <p className="mt-0.5 text-[12px] text-slate-400">
+            Not a PocketFM promo — other in-house work. They leave the free list until that date, then Home asks you to follow up.
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[12rem_1fr_10rem_auto]">
+            <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-400">
+              Artist
+              <input
+                list="home-artists"
+                value={form.name}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+                placeholder="Name"
+                className="mt-1 w-full rounded-md border border-white/[0.12] px-2 py-2 text-[13px] text-white"
+              />
+            </label>
+            <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-400">
+              Other show
+              <input
+                value={form.remark}
+                onChange={(event) => setForm({ ...form, remark: event.target.value })}
+                placeholder="Show / promo that is not under you"
+                className="mt-1 w-full rounded-md border border-white/[0.12] px-2 py-2 text-[13px] text-white"
+              />
+            </label>
+            <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-400">
+              Plotted till
+              <input
+                type="date"
+                value={form.until}
+                onChange={(event) => setForm({ ...form, until: event.target.value })}
+                className="mt-1 w-full rounded-md border border-white/[0.12] px-2 py-2 text-[13px] text-white"
+              />
+            </label>
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={savePlot}
+                className="w-full rounded-md bg-[#4361ee] px-4 py-2 text-[12px] font-bold text-white hover:bg-[#5470f0]"
+              >
+                Save plot
+              </button>
+            </div>
+          </div>
+          {formError && <p className="mt-2 text-[12px] text-rose-300">{formError}</p>}
+          <datalist id="home-artists">
+            {artistNames.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+        </div>
         {free.length === 0 ? (
           <Empty>Nobody is free, and nobody has a plotted end date yet.</Empty>
         ) : (
@@ -234,6 +391,7 @@ export function HomeBoard() {
                 <tr>
                   <th className="px-4 py-3 font-semibold">Artist</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
+                  <th className="w-28 px-4 py-3 font-semibold" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.08]">
@@ -255,8 +413,27 @@ export function HomeBoard() {
                           {row.line}
                         </Link>
                       ) : (
-                        <span className="font-semibold text-emerald-200">{row.line}</span>
+                        <span
+                          className={
+                            row.kind === "free"
+                              ? "font-semibold text-emerald-200"
+                              : row.kind === "overdue"
+                                ? "font-semibold text-rose-200"
+                                : "font-semibold text-[#c5d4ff]"
+                          }
+                        >
+                          {row.line}
+                        </span>
                       )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => fillPlot(row.name, row.until, plotForName(plots, row.name)?.remark)}
+                        className="rounded-md bg-white/[0.08] px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-300 hover:text-white"
+                      >
+                        Add plot
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -267,6 +444,20 @@ export function HomeBoard() {
       </section>
     </div>
   );
+}
+
+function overlayPlot(row: HomeFree, plots: OutsidePlot[], today: string): HomeFree | null {
+  const plot = plotForName(plots, row.name);
+  if (!plot) return row;
+  if (plot.until <= today) return null;
+  const note = plot.remark ? ` · ${plot.remark}` : " · other in-house";
+  return {
+    ...row,
+    kind: "plotted",
+    line: `Plotted till ${formatDmy(plot.until)}${note}`,
+    until: plot.until,
+    href: null,
+  };
 }
 
 function Empty({ children }: { children: string }) {

@@ -47,44 +47,44 @@ export function AskBoard() {
     }
     const id = nextId.n++;
     setQuestion("");
-    setTurns((current) => [...current, { id, question: next, reply: null, waiting: true }]);
     const local = answerOps(snap, next, pick, remembered, lastIntent.current, lastPeople.current);
     if (local.focus) setFocus(local.focus);
     if (local.intent) lastIntent.current = local.intent;
     if (local.people?.length) lastPeople.current = local.people;
     else if (local.focus?.kind === "person") lastPeople.current = [local.focus.id];
-    if (local.choices?.length) {
-      setTurns((current) => current.map((turn) => (turn.id === id ? { ...turn, reply: local, waiting: false } : turn)));
-      return;
-    }
+    setTurns((current) => [...current, { id, question: next, reply: local, waiting: false }]);
+    if (local.choices?.length) return;
+
+    const tables = local.tables?.length ? local.tables : local.table ? [local.table] : [];
+    const tableText = tables
+      .map((table) => {
+        const header = [table.title, table.columns.join(" | ")].filter(Boolean).join("\n");
+        return [header, ...table.rows.map((row) => row.join(" | "))].join("\n");
+      })
+      .join("\n\n");
+    const facts = [local.lines.join("\n"), tableText].filter(Boolean).join("\n\n");
     let lines = local.lines;
-    if (!local.choices?.length) {
-      // Serialize tables alongside the lines so the AI can answer questions whose answer lives in a table
-      // (leave days, feedback remarks, per-part dates, productivity counts).
-      const tables = local.tables?.length ? local.tables : local.table ? [local.table] : [];
-      const tableText = tables
-        .map((table) => {
-          const header = [table.title, table.columns.join(" | ")].filter(Boolean).join("\n");
-          return [header, ...table.rows.map((row) => row.join(" | "))].join("\n");
-        })
-        .join("\n\n");
-      const facts = [local.lines.join("\n"), tableText].filter(Boolean).join("\n\n");
-      try {
-        const res = await fetch("/api/ops/ask", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: next, facts, history: history.current.slice(-6), intent: local.intent }),
-        });
-        const data = (await res.json()) as { summary?: string | null };
-        if (data.summary) lines = data.summary.split(/\n+/).filter(Boolean);
-      } catch {
-        /* Keep the sheet summary. */
+    try {
+      const ctrl = new AbortController();
+      const timer = window.setTimeout(() => ctrl.abort(), 10000);
+      const res = await fetch("/api/ops/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: next, facts, history: history.current.slice(-6), intent: local.intent }),
+        signal: ctrl.signal,
+      });
+      window.clearTimeout(timer);
+      const data = (await res.json()) as { summary?: string | null };
+      if (data.summary) {
+        lines = data.summary.split(/\n+/).filter(Boolean);
+        setTurns((current) =>
+          current.map((turn) => (turn.id === id ? { ...turn, reply: { ...local, lines } } : turn))
+        );
       }
-      history.current = [...history.current, { question: next, answer: lines.join(" ") }].slice(-6);
+    } catch {
+      /* Keep the sheet summary already on screen. */
     }
-    setTurns((current) =>
-      current.map((turn) => (turn.id === id ? { ...turn, reply: { ...local, lines }, waiting: false } : turn))
-    );
+    history.current = [...history.current, { question: next, answer: lines.join(" ") }].slice(-6);
   }
 
   const finished = turns.filter((turn): turn is Turn & { reply: AskReply } => !!turn.reply && !turn.waiting);

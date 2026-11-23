@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { AUTH_COOKIE_OPTIONS } from "./cookies";
+import { AUTH_COOKIE_OPTIONS, persistAuthCookieOptions } from "./cookies";
 
 /** Supabase client bound to the current request's cookies — use in Server Components, route handlers. */
 export function createServerSupabase() {
@@ -18,7 +18,7 @@ export function createServerSupabase() {
       setAll(cookiesToSet) {
         try {
           for (const { name, value, options } of cookiesToSet) {
-            cookieStore.set(name, value, options);
+            cookieStore.set(name, value, persistAuthCookieOptions(value, options as Record<string, unknown>));
           }
         } catch {
           // Called from a Server Component without a mutable cookie jar — middleware refreshes the
