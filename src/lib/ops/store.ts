@@ -28,7 +28,7 @@ function seed(): OpsSnapshot {
     workingSource: structuredClone(MOCK_WORKING_SOURCE),
     assetsSource: structuredClone(MOCK_ASSETS_SOURCE),
     throughputSource: structuredClone(MOCK_THROUGHPUT_SOURCE),
-    promos: structuredClone(MOCK_PROMOS),
+    promos: structuredClone(MOCK_PROMOS).sort((a, b) => (b.sheetIndex ?? -1) - (a.sheetIndex ?? -1)),
     parts: structuredClone(MOCK_PARTS),
     animators: structuredClone(MOCK_ANIMATORS),
     qualityReviews: structuredClone(MOCK_QUALITY_REVIEWS),
@@ -65,6 +65,7 @@ export function getSnapshot(): OpsSnapshot {
 /** Replace the live store with a snapshot loaded from Sheets (or elsewhere). */
 export function hydrate(next: OpsSnapshot): void {
   snapshot = structuredClone(next);
+  snapshot.promos.sort((a, b) => (b.sheetIndex ?? -1) - (a.sheetIndex ?? -1));
 }
 
 export type ApplyOpts = {

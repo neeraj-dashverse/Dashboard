@@ -1,5 +1,5 @@
 import type { OpsSnapshot, Part, Promo } from "./types";
-import { isOngoingPromo } from "./selectors";
+import { byLatestPromo, isOngoingPromo } from "./selectors";
 
 export type AgencyPartPack = {
   partNo: number;
@@ -15,6 +15,7 @@ export type AgencyHandoff = {
   promoId: string;
   showName: string;
   promoName: string;
+  sheetIndex: number;
   cps: string | null;
   deadline: string | null;
   trackerStatus: string | null;
@@ -113,6 +114,7 @@ export function agencyHandoffs(snap: OpsSnapshot, opts?: { allOpen?: boolean }):
       promoId: promo.id,
       showName: promo.showName,
       promoName: promo.promoName,
+      sheetIndex: promo.sheetIndex,
       cps: promo.cps,
       deadline,
       trackerStatus: promo.trackerStatus,
@@ -132,14 +134,7 @@ export function agencyHandoffs(snap: OpsSnapshot, opts?: { allOpen?: boolean }):
     });
   }
 
-  return rows.sort((a, b) => {
-    if (b.openAgencyParts !== a.openAgencyParts) return b.openAgencyParts - a.openAgencyParts;
-    if (b.agencyParts.length !== a.agencyParts.length) return b.agencyParts.length - a.agencyParts.length;
-    const da = a.deadline ?? "9999";
-    const db = b.deadline ?? "9999";
-    if (da !== db) return da.localeCompare(db);
-    return a.showName.localeCompare(b.showName) || a.promoName.localeCompare(b.promoName);
-  });
+  return rows.sort((a, b) => byLatestPromo(a, b) || a.showName.localeCompare(b.showName));
 }
 
 export function agencySummary(rows: AgencyHandoff[]) {

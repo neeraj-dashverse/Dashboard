@@ -4,14 +4,13 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { agencyHandoffs, agencySummary, type AgencyHandoff } from "@/lib/ops/agency";
 import { formatClock, formatDmy, STAGE_LABEL } from "@/lib/ops/selectors";
-import { Kpi, PriorityPill, SectionTitle } from "./ui";
 import { useOps } from "./OpsProvider";
 
-function LinkChip({ href, label }: { href: string | null; label: string }) {
+function FileCell({ href, label }: { href: string | null; label: string }) {
   if (!href) {
     return (
-      <span className="rounded-md border border-dashed border-white/[0.08] px-2.5 py-1 text-[11px] text-slate-600">
-        {label} —
+      <span className="inline-flex rounded border border-dashed border-amber-500/25 px-1.5 py-0.5 text-[10px] text-amber-700/80">
+        {label}
       </span>
     );
   }
@@ -20,91 +19,101 @@ function LinkChip({ href, label }: { href: string | null; label: string }) {
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="rounded-md border border-[#4361ee]/30 bg-[#4361ee]/10 px-2.5 py-1 text-[11px] font-semibold text-[#9bb0ff] hover:bg-[#4361ee]/20"
+      className="inline-flex rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-200 hover:bg-emerald-500/20"
     >
-      {label} ↗
+      {label}
     </a>
   );
 }
 
 function partList(row: AgencyHandoff): string {
-  if (row.agencyParts.length === 0) return "None assigned";
-  return row.agencyParts.map((part) => `P${part.partNo}`).join(", ");
+  if (row.agencyParts.length === 0) return "None yet";
+  return row.agencyParts.map((part) => `P${part.partNo}`).join(" · ");
 }
 
-function HandoffCard({ row }: { row: AgencyHandoff }) {
+function HandoffRow({ row, open, onToggle }: { row: AgencyHandoff; open: boolean; onToggle: () => void }) {
+  const ready = row.missing.length === 0;
   return (
-    <article className="rounded-xl border border-white/[0.08] bg-[#161a26] p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <PriorityPill priority={row.priority} />
-            <Link href={`/promo/${encodeURIComponent(row.promoId)}`} className="truncate font-semibold text-white hover:underline">
-              {row.showName}
-              <span className="ml-1.5 font-normal text-slate-400">· {row.promoName}</span>
-            </Link>
+    <>
+      <tr className="border-t border-amber-500/10 hover:bg-amber-500/[0.04]">
+        <td className="px-3 py-3 align-top">
+          <button
+            type="button"
+            onClick={onToggle}
+            className="mr-1 text-[11px] text-amber-400/80"
+            aria-expanded={open}
+          >
+            {open ? "▾" : "▸"}
+          </button>
+          <Link
+            href={`/promo/${encodeURIComponent(row.promoId)}`}
+            className="font-semibold text-white hover:underline"
+          >
+            {row.showName}
+          </Link>
+          <p className="pl-5 text-[12px] text-slate-400">{row.promoName}</p>
+        </td>
+        <td className="px-3 py-3 align-top">
+          <p className="text-[15px] font-extrabold tabular-nums text-amber-100">
+            {row.agencyParts.length}
+            <span className="ml-1 text-[11px] font-semibold text-slate-500">
+              of {row.totalParts || "—"}
+            </span>
+          </p>
+          <p className="text-[11px] text-slate-400">{partList(row)}</p>
+          {row.agencyDurationSec > 0 && (
+            <p className="text-[11px] tabular-nums text-slate-500">{formatClock(row.agencyDurationSec)}</p>
+          )}
+        </td>
+        <td className="whitespace-nowrap px-3 py-3 align-top text-[12px] text-slate-200">{row.cps ?? "—"}</td>
+        <td className="whitespace-nowrap px-3 py-3 align-top text-[12px] tabular-nums text-slate-200">
+          {formatDmy(row.deadline)}
+        </td>
+        <td className="px-3 py-3 align-top">
+          <div className="flex flex-wrap gap-1">
+            <FileCell href={row.scriptLink} label="Script" />
+            <FileCell href={row.agencyScriptLink} label="Agency" />
+            <FileCell href={row.demarcatedScriptLink} label="Demarcated" />
+            <FileCell href={row.frameioLink} label="Frame.io" />
+            <FileCell href={row.assetsDriveLink} label="Drive" />
+            <FileCell href={row.assetMapLink} label="Map" />
           </div>
-          <p className="mt-1 text-[12px] text-slate-400">
-            Give agency <span className="font-semibold tabular-nums text-white">{row.agencyParts.length}</span>
-            {row.totalParts > 0 ? (
-              <span> of {row.totalParts} parts</span>
-            ) : null}
-            {row.agencyParts.length > 0 ? <span> · {partList(row)}</span> : null}
-            {row.agencyDurationSec > 0 ? (
-              <span> · {formatClock(row.agencyDurationSec)}</span>
-            ) : null}
-          </p>
-        </div>
-        <div className="text-right text-[12px] text-slate-400">
-          <p>
-            CP <span className="font-semibold text-slate-200">{row.cps ?? "—"}</span>
-          </p>
-          <p className="tabular-nums">
-            Deadline <span className="font-semibold text-slate-200">{formatDmy(row.deadline)}</span>
-          </p>
-        </div>
-      </div>
-
-      {row.agencyParts.length > 0 && (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[520px] text-left text-[12px]">
-            <thead>
-              <tr className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                <th className="pb-1 pr-3 font-bold">Part</th>
-                <th className="pb-1 pr-3 font-bold">Duration</th>
-                <th className="pb-1 pr-3 font-bold">Agency</th>
-                <th className="pb-1 pr-3 font-bold">Deadline</th>
-                <th className="pb-1 font-bold">Stage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {row.agencyParts.map((part) => (
-                <tr key={part.partNo} className="border-t border-white/[0.05] text-slate-300">
-                  <td className="py-1.5 pr-3 font-semibold tabular-nums text-white">P{part.partNo}</td>
-                  <td className="py-1.5 pr-3 tabular-nums">{formatClock(part.durationSec)}</td>
-                  <td className="py-1.5 pr-3">{part.artist ?? "—"}</td>
-                  <td className="py-1.5 pr-3 tabular-nums">{formatDmy(part.deadline)}</td>
-                  <td className="py-1.5">{STAGE_LABEL[part.stage]}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+          {!ready && <p className="mt-1 text-[10px] text-rose-300">Need {row.missing.join(" · ")}</p>}
+        </td>
+      </tr>
+      {open && (
+        <tr className="bg-black/20">
+          <td colSpan={5} className="px-3 pb-3 pt-0">
+            {row.agencyParts.length === 0 ? (
+              <p className="pl-5 text-[12px] text-slate-500">No Production Tracker rows marked Agency yet.</p>
+            ) : (
+              <table className="ml-5 mt-1 w-[calc(100%-1.25rem)] text-left text-[12px]">
+                <thead>
+                  <tr className="text-[10px] font-bold uppercase tracking-wider text-amber-500/70">
+                    <th className="py-1 pr-3">Part</th>
+                    <th className="py-1 pr-3">Duration</th>
+                    <th className="py-1 pr-3">Agency</th>
+                    <th className="py-1 pr-3">Deadline</th>
+                    <th className="py-1">Stage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {row.agencyParts.map((part) => (
+                    <tr key={part.partNo} className="text-slate-300">
+                      <td className="py-1 pr-3 font-semibold tabular-nums text-amber-100">P{part.partNo}</td>
+                      <td className="py-1 pr-3 tabular-nums">{formatClock(part.durationSec)}</td>
+                      <td className="py-1 pr-3">{part.artist ?? "—"}</td>
+                      <td className="py-1 pr-3 tabular-nums">{formatDmy(part.deadline)}</td>
+                      <td className="py-1">{STAGE_LABEL[part.stage]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </td>
+        </tr>
       )}
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        <LinkChip href={row.scriptLink} label="Script" />
-        <LinkChip href={row.agencyScriptLink} label="Agency script" />
-        <LinkChip href={row.demarcatedScriptLink} label="Demarcated script" />
-        <LinkChip href={row.frameioLink} label="Frame.io" />
-        <LinkChip href={row.assetsDriveLink} label="Asset drive" />
-        <LinkChip href={row.assetMapLink} label="Asset map" />
-      </div>
-
-      {row.missing.length > 0 && (
-        <p className="mt-2 text-[11px] text-rose-300">Missing: {row.missing.join(", ")}</p>
-      )}
-    </article>
+    </>
   );
 }
 
@@ -112,6 +121,7 @@ export function AgencyBoard() {
   const { snap } = useOps();
   const [query, setQuery] = useState("");
   const [allOpen, setAllOpen] = useState(false);
+  const [openIds, setOpenIds] = useState<string[]>([]);
 
   const rows = useMemo(() => agencyHandoffs(snap, { allOpen }), [snap, allOpen]);
   const filtered = useMemo(() => {
@@ -128,24 +138,47 @@ export function AgencyBoard() {
   const summary = useMemo(() => agencySummary(filtered), [filtered]);
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-extrabold tracking-tight text-white">Agency</h1>
-        <p className="mt-1 max-w-2xl text-[13px] leading-5 text-slate-400">
-          Parts to hand to agency, with original / agency / demarcated scripts from Master Tracker,
-          plus Frame.io, asset drive, asset map, CP, and deadline.
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-[#2a2218] to-[#161a26] p-5">
+        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-500/80">Outside handoff</p>
+        <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Agency pack</h1>
+        <p className="mt-1 max-w-2xl text-[13px] leading-5 text-amber-100/70">
+          One row per promo: how many parts to give the agency, and the files they need.
+          Latest Master Tracker promo is on top.
         </p>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-amber-500/20 bg-black/20 px-3 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500/70">Agency parts</p>
+            <p className="text-xl font-extrabold tabular-nums text-white">{summary.agencyParts}</p>
+          </div>
+          <div className="rounded-lg border border-amber-500/20 bg-black/20 px-3 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500/70">Still open</p>
+            <p className="text-xl font-extrabold tabular-nums text-amber-200">{summary.openAgencyParts}</p>
+          </div>
+          <div className="rounded-lg border border-amber-500/20 bg-black/20 px-3 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500/70">Promos</p>
+            <p className="text-xl font-extrabold tabular-nums text-white">{summary.promos}</p>
+          </div>
+          <div className="rounded-lg border border-amber-500/20 bg-black/20 px-3 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500/70">Next deadline</p>
+            <p className="text-xl font-extrabold tabular-nums text-white">
+              {summary.nextDeadline ? formatDmy(summary.nextDeadline) : "—"}
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi label="Agency parts" value={summary.agencyParts} />
-        <Kpi label="Still open" value={summary.openAgencyParts} tone="text-amber-200" />
-        <Kpi label="Promos" value={summary.promos} />
-        <Kpi
-          label="Next deadline"
-          value={summary.nextDeadline ? formatDmy(summary.nextDeadline) : "—"}
-          tone="text-slate-100"
-        />
+      <div className="rounded-xl border border-amber-500/15 bg-[#1b1814] px-4 py-3 text-[12px] leading-5 text-slate-400">
+        <p className="font-semibold text-amber-200/90">Where this is collected</p>
+        <p className="mt-1">
+          <span className="text-slate-300">Master Tracker</span> · Script (I original) · Agency script (J) ·
+          Demarcated script (K) · CP (E).{" "}
+          <span className="text-slate-300">Production Tracker</span> · team Agency (G) · part · duration ·
+          artist · deadline (K).{" "}
+          <span className="text-slate-300">Assets Master</span> · Asset map (G) · Assets drive (I).{" "}
+          <span className="text-slate-300">Frame.io</span> · Master Sheet / Assets canvas or Krock when that is
+          the review link.
+        </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -153,36 +186,54 @@ export function AgencyBoard() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search show, promo, CP…"
-          className="min-w-[220px] flex-1 rounded-lg border border-white/[0.1] bg-[#222738] px-3 py-2 text-[13px] text-white placeholder:text-slate-500"
+          className="min-w-[220px] flex-1 rounded-lg border border-amber-500/20 bg-[#221c16] px-3 py-2 text-[13px] text-white placeholder:text-slate-500"
         />
-        <label className="flex items-center gap-2 rounded-lg border border-white/[0.1] bg-[#222738] px-3 py-2 text-[12px] text-slate-300">
+        <label className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-[#221c16] px-3 py-2 text-[12px] text-slate-300">
           <input
             type="checkbox"
             checked={allOpen}
             onChange={(event) => setAllOpen(event.target.checked)}
-            className="accent-[#4361ee]"
+            className="accent-amber-500"
           />
           Include open promos with no agency parts yet
         </label>
       </div>
 
-      <SectionTitle
-        title={allOpen ? "Open promos" : "Agency handoff"}
-        hint="Script = original · Agency + Demarcated = send to agency"
-        count={filtered.length}
-      />
-
       {filtered.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-white/[0.1] px-4 py-8 text-center text-[13px] text-slate-500">
+        <p className="rounded-xl border border-dashed border-amber-500/20 px-4 py-8 text-center text-[13px] text-slate-500">
           {allOpen
             ? "No open promos match this search."
             : "No Production Tracker rows are marked Agency yet. Tick the filter to see all open promos."}
         </p>
       ) : (
-        <div className="space-y-3">
-          {filtered.map((row) => (
-            <HandoffCard key={row.promoId} row={row} />
-          ))}
+        <div className="overflow-x-auto rounded-xl border border-amber-500/20">
+          <table className="min-w-[760px] w-full border-collapse text-left">
+            <thead className="bg-[#2a2218] text-[10px] font-bold uppercase tracking-wider text-amber-500/80">
+              <tr>
+                <th className="px-3 py-2.5">Promo</th>
+                <th className="px-3 py-2.5">Give agency</th>
+                <th className="px-3 py-2.5">CP</th>
+                <th className="px-3 py-2.5">Deadline</th>
+                <th className="px-3 py-2.5">Files</th>
+              </tr>
+            </thead>
+            <tbody className="bg-[#14110e]">
+              {filtered.map((row) => (
+                <HandoffRow
+                  key={row.promoId}
+                  row={row}
+                  open={openIds.includes(row.promoId)}
+                  onToggle={() =>
+                    setOpenIds((current) =>
+                      current.includes(row.promoId)
+                        ? current.filter((id) => id !== row.promoId)
+                        : [...current, row.promoId]
+                    )
+                  }
+                />
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

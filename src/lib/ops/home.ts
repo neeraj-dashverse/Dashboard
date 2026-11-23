@@ -113,6 +113,7 @@ export type HomeDelay = {
   key: string;
   bucket: "running" | "upcoming";
   promoId: string;
+  sheetIndex: number;
   title: string;
   where: string;
   planned: string | null;
@@ -153,6 +154,7 @@ function delayRow(
     key: `${tab}:${row.promo.id}:${lane}`,
     bucket: tab === "preprod" || !productionStarted(row, snap.today) ? "upcoming" : "running",
     promoId: row.promo.id,
+    sheetIndex: row.promo.sheetIndex ?? -1,
     title,
     where: lane,
     planned,
@@ -195,7 +197,7 @@ export function homeDelays(snap: OpsSnapshot): HomeDelay[] {
   return [...grouped.values()].sort((a, b) => {
     if (a.extreme !== b.extreme) return a.extreme ? -1 : 1;
     if (a.daysLate !== b.daysLate) return b.daysLate - a.daysLate;
-    return a.title.localeCompare(b.title);
+    return b.sheetIndex - a.sheetIndex || a.title.localeCompare(b.title);
   });
 }
 

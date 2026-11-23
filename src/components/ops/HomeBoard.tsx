@@ -9,23 +9,6 @@ import type { IncomingPromo } from "@/lib/ops/tasks";
 import { Kpi, SectionTitle } from "./ui";
 import { useOps } from "./OpsProvider";
 
-const SEEN_KEY = "ops-pocketfm-seen";
-
-function readSeen(): string[] | null {
-  try {
-    const raw = window.localStorage.getItem(SEEN_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeSeen(ids: string[]): void {
-  window.localStorage.setItem(SEEN_KEY, JSON.stringify([...new Set(ids)]));
-}
-
 export function HomeBoard() {
   const { snap } = useOps();
   const [incoming, setIncoming] = useState<IncomingPromo[] | null>(null);
@@ -68,18 +51,9 @@ export function HomeBoard() {
       body: JSON.stringify({ knownIds: snap.promos.map((promo) => promo.id) }),
     })
       .then((res) => res.json())
-      .then((data: { incoming?: IncomingPromo[]; catalog?: string[] }) => {
+      .then((data: { incoming?: IncomingPromo[] }) => {
         if (cancelled) return;
-        const catalog = data.catalog ?? [];
-        const rows = data.incoming ?? [];
-        const stored = readSeen();
-        if (stored == null) {
-          writeSeen(catalog);
-          setIncoming([]);
-          return;
-        }
-        const seen = new Set(stored);
-        setIncoming(rows.filter((row) => !seen.has(row.id)));
+        setIncoming(data.incoming ?? []);
       })
       .catch(() => {
         if (!cancelled) setIncoming([]);
@@ -88,16 +62,6 @@ export function HomeBoard() {
       cancelled = true;
     };
   }, [snap.promos, snap.live]);
-
-  function markSaw(id: string) {
-    writeSeen([...(readSeen() ?? []), id]);
-    setIncoming((current) => (current ?? []).filter((row) => row.id !== id));
-  }
-
-  function markAllSaw() {
-    writeSeen([...(readSeen() ?? []), ...(incoming ?? []).map((row) => row.id)]);
-    setIncoming([]);
-  }
 
   function persistPlots(next: OutsidePlot[]) {
     setPlots(next);
@@ -221,59 +185,35 @@ export function HomeBoard() {
       <section className="space-y-2">
         <SectionTitle
           title="New promos on PocketFM"
-          hint="Only a newly added open row. Closed and old rows are ignored."
+          hint="Take them in on Workflow. Saves go to your Master Tracker, not PocketFM."
           count={incoming?.length}
         />
         {incoming == null ? (
           <Empty>Checking the Master Sheet…</Empty>
         ) : incoming.length === 0 ? (
-          <Empty>No new promo added since you last checked.</Empty>
+          <Empty>No new promo is waiting in Workflow.</Empty>
         ) : (
-          <ul className="space-y-2">
-            {incoming.length > 1 && (
-              <li className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={markAllSaw}
-                  className="rounded-md px-2 py-1 text-[11px] font-semibold text-slate-400 hover:text-white"
-                >
-                  Mark all as saw
-                </button>
-              </li>
+          <div className="rounded-xl border border-white/[0.08] bg-[#222738] px-4 py-3">
+            <ul className="space-y-1.5">
+              {incoming.slice(0, 4).map((row) => (
+                <li key={row.id} className="text-[13px] text-slate-200">
+                  <span className="font-semibold text-white">{row.showName}</span>
+                  <span className="text-slate-400">
+                    {row.needsName ? " · needs a promo name" : row.promoName ? ` · ${row.promoName}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {incoming.length > 4 && (
+              <p className="mt-1 text-[11px] text-slate-500">+{incoming.length - 4} more</p>
             )}
-            {incoming.map((row) => (
-              <li
-                key={row.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-[#222738] px-4 py-3"
-              >
-                <div>
-                  <p className="text-[13px] font-semibold text-white">
-                    {row.showName}
-                    {row.promoName ? ` · ${row.promoName}` : ""}
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-slate-400">New row on the PocketFM Master Sheet</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <a
-                    href={snap.source.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-md bg-white/[0.08] px-2.5 py-1 text-[11px] font-bold text-slate-200"
-                  >
-                    Open sheet
-                  </a>
-                  <button
-                    type="button"
-                    title="Mark as saw"
-                    onClick={() => markSaw(row.id)}
-                    className="rounded-md border border-emerald-400/40 bg-emerald-400/15 px-2.5 py-1 text-[11px] font-bold text-emerald-200 hover:bg-emerald-400/25"
-                  >
-                    ✓ Saw
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+            <Link
+              href="/workflow"
+              className="mt-3 inline-block rounded-md bg-[#4361ee] px-3 py-1.5 text-[12px] font-bold text-white hover:bg-[#5470f0]"
+            >
+              Open Workflow
+            </Link>
+          </div>
         )}
       </section>
 

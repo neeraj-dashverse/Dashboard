@@ -165,6 +165,11 @@ export type Promo = {
   totalAssetMade: number | null;
   totalAssetGenerated: number | null;
   creditPerMinInhouse: number | null;
+  /**
+   * Position on Master Tracker (0 = first data row). Later rows are newer,
+   * so lists sort this descending.
+   */
+  sheetIndex: number;
   /** ISO date of last tracker field touch — drives "chase me" nudges. */
   lastTrackerUpdateAt: string | null;
 

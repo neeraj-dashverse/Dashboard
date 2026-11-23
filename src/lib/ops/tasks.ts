@@ -15,6 +15,10 @@ export type IncomingPromo = {
   promoName: string;
   stage?: string | null;
   status?: string | null;
+  /** 1-based Master Sheet row, for writing the promo name back. */
+  masterRow?: number;
+  needsName?: boolean;
+  scriptLink?: string | null;
 };
 
 export type TaskGroup = "new" | "delay" | "match" | "writeback" | "nudge";

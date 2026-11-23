@@ -7,11 +7,12 @@ import { useOps } from "./ops/OpsProvider";
 const navItems = [
   { href: "/ask", label: "Ask AI", icon: "✦" },
   { href: "/home", label: "Home", icon: "⌂" },
-  { href: "/agency", label: "Agency", icon: "⧉" },
+  { href: "/workflow", label: "Workflow", icon: "↳" },
   { href: "/planner", label: "Calendar", icon: "▦" },
   { href: "/team", label: "Team", icon: "☰" },
   { href: "/productivity", label: "Productivity", icon: "◈" },
   { href: "/record", label: "Record", icon: "≡" },
+  { href: "/agency", label: "Agency", icon: "⧉" },
 ];
 
 function itemClass(active: boolean): string {

@@ -112,6 +112,8 @@ export const MOCK_ANIMATORS: Animator[] = [
   { id: "a7", name: "Angela Nigam", team: "in_house", minutesPerWeek: 44, onTimePct: 80 },
 ];
 
+let mockSheetIndex = 0;
+
 function promo(
   showName: string,
   scriptName: string,
@@ -180,6 +182,7 @@ function promo(
     totalAssetMade: fields.totalAssetMade ?? null,
     totalAssetGenerated: fields.totalAssetGenerated ?? null,
     creditPerMinInhouse: fields.creditPerMinInhouse ?? null,
+    sheetIndex: fields.sheetIndex ?? mockSheetIndex++,
     lastTrackerUpdateAt: fields.lastTrackerUpdateAt ?? null,
     assetTeam: fields.assetTeam ?? null,
     preProd: fields.preProd ?? null,

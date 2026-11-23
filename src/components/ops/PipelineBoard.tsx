@@ -6,6 +6,7 @@ import {
   daysLate,
   formatDuration,
   funnelCounts,
+  latestPromoIndex,
   STAGE_LABEL,
   STAGE_ORDER,
 } from "@/lib/ops/selectors";
@@ -22,7 +23,11 @@ export function PipelineBoard() {
   const columns = STAGE_ORDER.filter((s) => s !== "delivered").map((stage) => {
     const parts = snap.parts
       .filter((p) => p.stage === stage)
-      .sort((a, b) => daysLate(b.plannedDate, snap.today, snap) - daysLate(a.plannedDate, snap.today, snap));
+      .sort((a, b) => {
+        const latest = latestPromoIndex(snap, b.promoId) - latestPromoIndex(snap, a.promoId);
+        if (latest !== 0) return latest;
+        return daysLate(b.plannedDate, snap.today, snap) - daysLate(a.plannedDate, snap.today, snap);
+      });
     return { stage, parts };
   });
 

@@ -20,6 +20,20 @@ function addDaysIso(iso: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Master Tracker row order: later rows are newer, so lists put them first. */
+export function byLatestPromo(
+  a: { sheetIndex?: number } | null | undefined,
+  b: { sheetIndex?: number } | null | undefined
+): number {
+  return (b?.sheetIndex ?? -1) - (a?.sheetIndex ?? -1);
+}
+
+export function latestPromoIndex(snap: OpsSnapshot, promoId: string): number {
+  const base = promoId.split("#")[0];
+  const found = snap.promos.find((promo) => promo.id === promoId || promo.id.split("#")[0] === base);
+  return found?.sheetIndex ?? -1;
+}
+
 /** Matches Production Tracker Stage dropdown order (ops kanban). */
 export const STAGE_ORDER: Stage[] = [
   "planning",
@@ -188,6 +202,7 @@ export type PromoRecord = {
   showName: string;
   promoName: string;
   status: string;
+  sheetIndex: number;
   /** Sum of the part lengths on Production Tracker. */
   initialSec: number | null;
   /** Sum of Worked Duration (AF) across parts. */
@@ -315,6 +330,7 @@ export function promoRecords(snap: OpsSnapshot): PromoRecord[] {
       showName: promo?.showName || showFallback || "—",
       promoName: promo?.promoName || nameFallback || "—",
       status,
+      sheetIndex: promo?.sheetIndex ?? -1,
       initialSec: lengths.length ? lengths.reduce((sum, seconds) => sum + seconds, 0) : null,
       workedSec: worked.length ? worked.reduce((sum, seconds) => sum + seconds, 0) : null,
       finalSec: promo?.finalAssetLengthSec ?? null,
@@ -398,6 +414,7 @@ function collapsePromoRecords(records: PromoRecord[]): PromoRecord[] {
     return {
       ...primary,
       id: primary.id.split("#")[0],
+      sheetIndex: Math.max(...group.map((record) => record.sheetIndex ?? -1)),
       parts: partList,
       closedOn,
       initialSec: lengths.length ? lengths.reduce((sum, seconds) => sum + seconds, 0) : null,
@@ -432,14 +449,7 @@ function collapsePromoRecords(records: PromoRecord[]): PromoRecord[] {
       if ((show && named.has(show)) || (promo && named.has(promo))) return false;
       return Boolean(record.initialSec || record.closedOn || record.assetPeople || record.finalSec);
     })
-    .sort((a, b) => {
-      if (a.assetStart && b.assetStart && a.assetStart !== b.assetStart) {
-        return b.assetStart.localeCompare(a.assetStart);
-      }
-      if (a.assetStart && !b.assetStart) return -1;
-      if (!a.assetStart && b.assetStart) return 1;
-      return a.showName.localeCompare(b.showName) || a.promoName.localeCompare(b.promoName);
-    });
+    .sort((a, b) => byLatestPromo(a, b) || a.showName.localeCompare(b.showName) || a.promoName.localeCompare(b.promoName));
 }
 
 export function partLabel(snap: OpsSnapshot, part: Part): string {
@@ -1063,6 +1073,7 @@ function promoForPart(snap: OpsSnapshot, part: Part): Promo {
     totalAssetGenerated: null,
     creditPerMinInhouse: null,
     lastTrackerUpdateAt: null,
+    sheetIndex: -1,
     assetTeam: null,
     preProd: null,
   };
@@ -1072,7 +1083,10 @@ export function plannerRows(snap: OpsSnapshot): PlannerRow[] {
   const open = snap.parts
     .filter((part) => part.stage !== "delivered")
     .slice()
-    .sort((a, b) => a.promoId.localeCompare(b.promoId) || a.partNo - b.partNo);
+    .sort(
+      (a, b) =>
+        latestPromoIndex(snap, b.promoId) - latestPromoIndex(snap, a.promoId) || a.partNo - b.partNo
+    );
   const rows: PlannerRow[] = [];
   let lastPromo = "";
   for (const part of open) {

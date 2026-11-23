@@ -65,6 +65,7 @@ function priority(raw: string | null): Promo["priority"] {
 /** Master Tracker data rows (already sliced past the 2 header rows). A..O. */
 export function parsePromos(rows: Grid): Promo[] {
   const promos: Promo[] = [];
+  let sheetIndex = 0;
   for (const r of rows) {
     const rawShow = text(r[0]);
     const rawPromo = text(r[1]);
@@ -125,6 +126,7 @@ export function parsePromos(rows: Grid): Promo[] {
       totalAssetMade: num(r[12]),
       totalAssetGenerated: num(r[13]),
       creditPerMinInhouse: num(r[14]),
+      sheetIndex: sheetIndex++,
       lastTrackerUpdateAt: null,
       assetTeam: null,
       preProd: null,
@@ -283,6 +285,7 @@ export function stubPromo(showName: string, scriptName: string): Promo {
     totalAssetMade: null,
     totalAssetGenerated: null,
     creditPerMinInhouse: null,
+    sheetIndex: -1,
     lastTrackerUpdateAt: null,
     assetTeam: null,
     preProd: null,

@@ -251,6 +251,7 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
     const detail = matchMasterDetail(promo, masterDetails);
     if (detail) applyMasterDetail(promo, detail);
   }
+  promos.sort((a, b) => (b.sheetIndex ?? -1) - (a.sheetIndex ?? -1));
 
   return {
     today: todayIso(),
@@ -513,5 +514,9 @@ export const sheetsAdapter: OpsAdapter = {
     return rememberSheets(snap, true);
   },
 };
+
+export function bustSheetCache(): void {
+  sheetCache = null;
+}
 
 export { hasSheetCredentials };

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import {
   artistName,
-  assetStartDate,
   calendarDelay,
   dayLanes,
   formatDmy,
@@ -173,9 +172,8 @@ export function PlannerBoard() {
     const source = lane === "asset" ? plannerPreprodRows(snap) : plannerRows(snap);
     for (const row of source) map.set(row.promo.id, row.promo);
     return [...map.values()].sort((a, b) => {
-      const startA = assetStartDate(a, snap.today) ?? "";
-      const startB = assetStartDate(b, snap.today) ?? "";
-      if (startA !== startB) return startB.localeCompare(startA);
+      const latest = (b.sheetIndex ?? -1) - (a.sheetIndex ?? -1);
+      if (latest !== 0) return latest;
       return (a.showName || "").localeCompare(b.showName || "");
     });
   }, [snap, lane]);

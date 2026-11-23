@@ -86,9 +86,8 @@ export function PlanBoard({
     for (const row of plannerPreprodRows(snap)) map.set(row.promo.id, row.promo);
     for (const row of plannerRows(snap)) map.set(row.promo.id, row.promo);
     return [...map.values()].sort((a, b) => {
-      const startA = assetStartDate(a, snap.today) ?? "";
-      const startB = assetStartDate(b, snap.today) ?? "";
-      if (startA !== startB) return startB.localeCompare(startA);
+      const latest = (b.sheetIndex ?? -1) - (a.sheetIndex ?? -1);
+      if (latest !== 0) return latest;
       return (a.showName || "").localeCompare(b.showName || "");
     });
   }, [snap]);
@@ -99,7 +98,7 @@ export function PlanBoard({
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Plan</p>
         {!compact && <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Promos</h1>}
         <p className={`text-[12px] leading-5 text-slate-400 ${compact ? "mt-1" : "mt-1 max-w-3xl"}`}>
-          Newest asset start first. First half is by 3:00pm IST, second half by 8:00pm, EOD is 8:00pm.
+          Latest promo first. First half is by 3:00pm IST, second half by 8:00pm, EOD is 8:00pm.
         </p>
       </div>
       <div className="overflow-hidden rounded-xl border border-white/[0.12]">
