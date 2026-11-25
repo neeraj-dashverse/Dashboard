@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { agencyHandoffs, agencySummary, type AgencyHandoff } from "@/lib/ops/agency";
+import { workedDurationMin } from "@/lib/ops/credits";
 import { formatClock, formatDmy, STAGE_LABEL } from "@/lib/ops/selectors";
+import { CreditStats } from "./CreditStats";
 import { useOps } from "./OpsProvider";
 
 function FileCell({ href, label }: { href: string | null; label: string }) {
@@ -31,7 +33,17 @@ function partList(row: AgencyHandoff): string {
   return row.agencyParts.map((part) => `P${part.partNo}`).join(" · ");
 }
 
-function HandoffRow({ row, open, onToggle }: { row: AgencyHandoff; open: boolean; onToggle: () => void }) {
+function HandoffRow({
+  row,
+  open,
+  onToggle,
+  workedMin,
+}: {
+  row: AgencyHandoff;
+  open: boolean;
+  onToggle: () => void;
+  workedMin: number | null;
+}) {
   const ready = row.missing.length === 0;
   return (
     <>
@@ -70,6 +82,9 @@ function HandoffRow({ row, open, onToggle }: { row: AgencyHandoff; open: boolean
           {formatDmy(row.deadline)}
         </td>
         <td className="px-3 py-3 align-top">
+          <CreditStats usage={row.creditUsage} compact workedMin={workedMin} />
+        </td>
+        <td className="px-3 py-3 align-top">
           <div className="flex flex-wrap gap-1">
             <FileCell href={row.scriptLink} label="Script" />
             <FileCell href={row.agencyScriptLink} label="Agency" />
@@ -83,7 +98,7 @@ function HandoffRow({ row, open, onToggle }: { row: AgencyHandoff; open: boolean
       </tr>
       {open && (
         <tr className="bg-black/20">
-          <td colSpan={5} className="px-3 pb-3 pt-0">
+          <td colSpan={6} className="px-3 pb-3 pt-0">
             {row.agencyParts.length === 0 ? (
               <p className="pl-5 text-[12px] text-slate-500">No Production Tracker rows marked Agency yet.</p>
             ) : (
@@ -132,6 +147,7 @@ export function AgencyBoard() {
         row.showName.toLowerCase().includes(q) ||
         row.promoName.toLowerCase().includes(q) ||
         (row.cps ?? "").toLowerCase().includes(q) ||
+        (row.creditUsage?.label ?? "").toLowerCase().includes(q) ||
         partList(row).toLowerCase().includes(q)
     );
   }, [rows, query]);
@@ -177,7 +193,9 @@ export function AgencyBoard() {
           artist · deadline (K).{" "}
           <span className="text-slate-300">Assets Master</span> · Asset map (G) · Assets drive (I).{" "}
           <span className="text-slate-300">Frame.io</span> · Master Sheet / Assets canvas or Krock when that is
-          the review link.
+          the review link.{" "}
+          <span className="text-slate-300">Credits</span> · Credit Consumption Analysis · PFM tab, shown here
+          only.
         </p>
       </div>
 
@@ -214,6 +232,7 @@ export function AgencyBoard() {
                 <th className="px-3 py-2.5">Give agency</th>
                 <th className="px-3 py-2.5">CP</th>
                 <th className="px-3 py-2.5">Deadline</th>
+                <th className="px-3 py-2.5">Credits</th>
                 <th className="px-3 py-2.5">Files</th>
               </tr>
             </thead>
@@ -223,6 +242,7 @@ export function AgencyBoard() {
                   key={row.promoId}
                   row={row}
                   open={openIds.includes(row.promoId)}
+                  workedMin={workedDurationMin(snap, row.promoId)}
                   onToggle={() =>
                     setOpenIds((current) =>
                       current.includes(row.promoId)

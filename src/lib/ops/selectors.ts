@@ -1076,6 +1076,7 @@ function promoForPart(snap: OpsSnapshot, part: Part): Promo {
     sheetIndex: -1,
     assetTeam: null,
     preProd: null,
+    creditUsage: null,
   };
 }
 

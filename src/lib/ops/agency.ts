@@ -1,4 +1,4 @@
-import type { OpsSnapshot, Part, Promo } from "./types";
+import type { CreditUsage, OpsSnapshot, Part, Promo } from "./types";
 import { byLatestPromo, isOngoingPromo } from "./selectors";
 
 export type AgencyPartPack = {
@@ -31,6 +31,7 @@ export type AgencyHandoff = {
   frameioLink: string | null;
   assetsDriveLink: string | null;
   assetMapLink: string | null;
+  creditUsage: CreditUsage | null;
   missing: string[];
 };
 
@@ -130,6 +131,7 @@ export function agencyHandoffs(snap: OpsSnapshot, opts?: { allOpen?: boolean }):
       frameioLink: frame,
       assetsDriveLink,
       assetMapLink,
+      creditUsage: promo.creditUsage,
       missing,
     });
   }

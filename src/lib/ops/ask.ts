@@ -1,3 +1,4 @@
+import { formatCredits, formatPerMin, perMinCredits, workedDurationMin } from "./credits";
 import type { OpsSnapshot, Part, Promo, QualityReview } from "./types";
 import {
   animatorProductivity,
@@ -65,6 +66,7 @@ export type AskIntent =
   | "person_full"
   | "promo_close"
   | "promo_status"
+  | "credits"
   | "sheets";
 
 export type AskReply = {
@@ -751,6 +753,7 @@ function answerPromo(snap: OpsSnapshot, promo: Promo, question = ""): string[] {
       `${title} has no production parts yet.`,
       status ? `Pre-production status is ${status}.` : "It is not on the production tracker.",
       ...(wantsPowerStart(question) ? powerStartFacts(snap, promo) : []),
+      ...sheetFacts(snap, promo),
     ];
   }
   const open = parts.filter((part) => part.stage !== "delivered");
@@ -759,6 +762,7 @@ function answerPromo(snap: OpsSnapshot, promo: Promo, question = ""): string[] {
       `${title} is closed. All ${parts.length} parts are delivered.`,
       ...whoAndDuration(snap, promo, parts),
       ...(wantsPowerStart(question) ? powerStartFacts(snap, promo) : []),
+      ...sheetFacts(snap, promo),
     ];
   }
 
@@ -828,6 +832,14 @@ function sheetFacts(snap: OpsSnapshot, promo: Promo): string[] {
     .filter(Boolean)
     .join(", ");
   if (master) lines.push(`Dashverse Master Sheet: ${master}.`);
+  if (promo.creditUsage) {
+    const credit = promo.creditUsage;
+    const worked = workedDurationMin(snap, promo.id);
+    const perMin = perMinCredits(credit.totalCredits, worked ?? credit.durationMin);
+    lines.push(
+      `Promo credits (PFM … Promo, dashboard only): videos ${formatCredits(credit.videos)}, LLM ${formatCredits(credit.llm)}, images ${formatCredits(credit.images)}, total ${formatCredits(credit.totalCredits)}${perMin != null ? `, ${formatPerMin(perMin)}` : ""}.`
+    );
+  }
   const base = promo.id.split("#")[0];
   const plans = snap.plannerCells
     .filter((cell) => cell.promoId === promo.id || cell.promoId.split("#")[0] === base)
@@ -852,6 +864,7 @@ const SHEET_GUIDE = [
   "Master Productivity: CPS rating and written feedback. This is separate from how many minutes someone worked.",
   "Animation productivity, Master data: one row per artist per day. Date, artist, show, promo, parts worked, and duration worked that day — under 3 min (low), 3-5 min (avg), 5-7 min (high), more than 7 min (highly productive), or correction (ignored).",
   "Dashverse Master Sheet: canvas, delivery files, script links, cost, and payment.",
+  "Credit Consumption Analysis, PFM tab: only rows that start with PFM and end with Promo. Video, LLM, image, total credits, and credits per minute vs duration worked. Read in the dashboard only — not copied into Timeline.",
   "Planner tab: the revised date, and first half, second half, or EOD.",
   "Remarks tab: every time a plan is recorded, kept as its own row.",
 ];
@@ -1187,6 +1200,7 @@ function detectIntent(question: string, lastIntent?: AskIntent | null): AskInten
     return "availability";
   }
   if (/\bsheet|spreadsheet|which tab|what do you (read|use)\b/.test(q)) return "sheets";
+  if (/\bcredits?\b|\byield\b|\bcost in \$|\bcredit consumption\b/.test(q)) return "credits";
 
   if (/\bwhen.{0,16}(free|available)\b/.test(q)) return "person_when_free";
   if (/\bwhich promo\b|\bworking on\b|\bwhat promo\b|\bwhich show\b|\bshe is in\b|\bhe is in\b/.test(q)) return "person_promo";
@@ -1209,6 +1223,7 @@ const TEAM_INTENTS: AskIntent[] = [
   "capacity",
   "productivity",
   "avg_promo_time",
+  "credits",
   "sheets",
 ];
 
@@ -1221,7 +1236,43 @@ function teamReply(snap: OpsSnapshot, intent: AskIntent): AskReply {
   if (intent === "capacity") return capacityReply(snap);
   if (intent === "productivity") return productivityAllReply(snap);
   if (intent === "avg_promo_time") return avgPromoTimeReply(snap);
+  if (intent === "credits") return creditsReply(snap);
   return { heading: "Sheets I use", lines: SHEET_GUIDE, intent: "sheets" };
+}
+
+function creditsReply(snap: OpsSnapshot): AskReply {
+  const rows = [...(snap.creditUsages ?? [])].sort((a, b) => (b.totalCredits ?? 0) - (a.totalCredits ?? 0));
+  if (rows.length === 0) {
+    return {
+      heading: "Credits",
+      lines: [
+        "No PFM … Promo credit rows yet. Open Credits — it stays in the dashboard, not in your Timeline sheet.",
+      ],
+      intent: "credits",
+    };
+  }
+  return {
+    heading: "Promo credits",
+    lines: [
+      `${rows.length} PFM Promo row${rows.length === 1 ? "" : "s"}. Video, LLM, and image vs duration worked. Not written into your sheet.`,
+    ],
+    table: {
+      title: "PFM Promo credits",
+      columns: ["Promo", "Videos", "LLM", "Images", "Total", "/ min"],
+      rows: rows.slice(0, 12).map((row) => {
+        const worked = workedDurationMin(snap, row.matchedPromoId);
+        return [
+          row.label,
+          formatCredits(row.videos),
+          formatCredits(row.llm),
+          formatCredits(row.images),
+          formatCredits(row.totalCredits),
+          formatPerMin(perMinCredits(row.totalCredits, worked ?? row.durationMin)),
+        ];
+      }),
+    },
+    intent: "credits",
+  };
 }
 
 /** Answer from the sheets already loaded in the dashboard. */
@@ -1247,6 +1298,13 @@ export function answerOps(
     intent === "productivity" || PERSON_INTENTS.includes(intent) || intent === "person_full";
   if (named.length >= 1 && (personLike || !TEAM_INTENTS.includes(intent))) {
     return peopleReply(snap, named, personLike ? intent : "person_full");
+  }
+
+  if (intent === "credits") {
+    const rankedCredits = rankedChoices(snap, asked);
+    const promoHit = rankedCredits.find((item) => item.choice.kind === "promo" && item.score >= 70);
+    if (promoHit) return replyFor(snap, promoHit.choice, asked, "credits");
+    return creditsReply(snap);
   }
 
   if (TEAM_INTENTS.includes(intent)) return teamReply(snap, intent);

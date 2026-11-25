@@ -184,6 +184,40 @@ export type Promo = {
    * used to plan when animation can pick up.
    */
   preProd: PreProdAssetRow | null;
+
+  /**
+   * Credit Consumption Analysis · PFM tab, joined in the dashboard only.
+   * Never written back to Master Tracker.
+   */
+  creditUsage: CreditUsage | null;
+};
+
+/** One PFM-tab row from Credit Consumption Analysis Master. */
+export type CreditUsage = {
+  id: string;
+  showId1: string | null;
+  showId2: string | null;
+  /** Show Name as it appears on the PFM tab. */
+  label: string;
+  conceptType: string | null;
+  videos: number | null;
+  llm: number | null;
+  images: number | null;
+  audio: number | null;
+  lipSync: number | null;
+  totalCredits: number | null;
+  costUsd: number | null;
+  videoSavedCount: number | null;
+  durationMin: number | null;
+  productionCostPerMin: number | null;
+  partsCompleted: number | null;
+  partsInProduction: number | null;
+  status: string | null;
+  runtime: number | null;
+  runtimeCostPerMin: number | null;
+  yieldPct: number | null;
+  matchedPromoId: string | null;
+  matchScore: number;
 };
 
 /** Append-only remark entry (not a single overwritable cell). */
@@ -538,6 +572,9 @@ export type OpsSnapshot = {
    * (Diwali and similar) so the calendar and delay counts still see past holidays.
    */
   attendance: AttendanceDay[];
+  /** Credit Consumption Analysis Master · PFM tab (dashboard-only). */
+  creditSource: SheetSource;
+  creditUsages: CreditUsage[];
 };
 
 /** Stable join key — must match across Master / PocketFM / Assets. */

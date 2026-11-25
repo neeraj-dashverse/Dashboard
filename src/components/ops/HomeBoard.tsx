@@ -6,6 +6,7 @@ import { homeDelays, homeFree, homeLeaves, type HomeFree } from "@/lib/ops/home"
 import { loadOutsidePlots, saveOutsidePlots, plotForName, type OutsidePlot } from "@/lib/ops/outside-plots";
 import { formatDmy } from "@/lib/ops/selectors";
 import type { IncomingPromo } from "@/lib/ops/tasks";
+import { filterWorkflowIncoming } from "@/lib/ops/workflow-queue";
 import { Kpi, SectionTitle } from "./ui";
 import { useOps } from "./OpsProvider";
 
@@ -53,7 +54,7 @@ export function HomeBoard() {
       .then((res) => res.json())
       .then((data: { incoming?: IncomingPromo[] }) => {
         if (cancelled) return;
-        setIncoming(data.incoming ?? []);
+        setIncoming(filterWorkflowIncoming(data.incoming ?? [], snap));
       })
       .catch(() => {
         if (!cancelled) setIncoming([]);
@@ -185,7 +186,7 @@ export function HomeBoard() {
       <section className="space-y-2">
         <SectionTitle
           title="New promos on PocketFM"
-          hint="Take them in on Workflow. Saves go to your Master Tracker, not PocketFM."
+          hint="Workflow: PocketFM script → Google agency copy → demarcate → CP → Master Tracker"
           count={incoming?.length}
         />
         {incoming == null ? (

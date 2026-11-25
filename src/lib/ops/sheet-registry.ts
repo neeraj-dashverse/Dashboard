@@ -330,6 +330,47 @@ export const DEMARCATION_INTEGRATION = {
 } as const;
 
 /** Asset team's spreadsheet — critical handoff for animation. */
+/**
+ * Credit Consumption Analysis Master — PFM tab only.
+ * Read in the dashboard. Never copy into Timeline / Master Tracker.
+ */
+export const CREDIT_CONSUMPTION_SHEET = {
+  spreadsheetId: "1ykH_uuC6dxJF5xKxkxyjflTwAKQQk207cc7r7N8-60c",
+  spreadsheetName: "Credit Consumption Analysis Master",
+  url: "https://docs.google.com/spreadsheets/d/1ykH_uuC6dxJF5xKxkxyjflTwAKQQk207cc7r7N8-60c/edit?gid=1628543693",
+  tabs: {
+    pfm: {
+      name: "PFM",
+      gid: 1628543693,
+      grain: "show_credit" as const,
+      role: "credit_consumption" as const,
+    },
+  },
+} as const;
+
+export const CREDIT_CONSUMPTION_COLUMNS = [
+  { col: "A", key: "showId1", header: "Show ID - 1" },
+  { col: "B", key: "showId2", header: "Show ID - 2" },
+  { col: "C", key: "label", header: "Show Name" },
+  { col: "D", key: "conceptType", header: "Concept Type" },
+  { col: "E", key: "videos", header: "Videos" },
+  { col: "F", key: "llm", header: "LLM" },
+  { col: "G", key: "images", header: "Images" },
+  { col: "H", key: "audio", header: "Audio" },
+  { col: "I", key: "lipSync", header: "LipSync" },
+  { col: "J", key: "totalCredits", header: "Total Credits" },
+  { col: "K", key: "costUsd", header: "Cost In $" },
+  { col: "L", key: "videoSavedCount", header: "Video Saved Count" },
+  { col: "M", key: "durationMin", header: "Duration In min" },
+  { col: "N", key: "productionCostPerMin", header: "Production Cost in $/ min" },
+  { col: "O", key: "partsCompleted", header: "Parts Completed" },
+  { col: "P", key: "partsInProduction", header: "Parts  In Production" },
+  { col: "Q", key: "status", header: "Status" },
+  { col: "R", key: "runtime", header: "Runtime (Block 1)" },
+  { col: "S", key: "runtimeCostPerMin", header: "Runtime Cost in $/ min" },
+  { col: "T", key: "yieldPct", header: "Yield%" },
+] as const;
+
 export const PFM_ASSETS_SHEET = {
   spreadsheetId: "1_0QMYmGef8A-mckXPWjGKD9_fUvxvzvpk5zvx5NnYQA",
   spreadsheetName: "PFM Dashboard - Assets",

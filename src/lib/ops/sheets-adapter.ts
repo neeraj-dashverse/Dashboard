@@ -11,10 +11,12 @@
 import type { OpsAdapter } from "./adapter";
 import {
   ANIMATION_PRODUCTIVITY_SHEET,
+  CREDIT_CONSUMPTION_SHEET,
   DASHVERSE_PFM_SHEET,
   PFM_ASSETS_SHEET,
   PFM_TIMELINE_SHEET,
 } from "./sheet-registry";
+import { attachCreditsToPromos, parseCreditUsages } from "./credits";
 import { batchGet, hasSheetCredentials, normKey, splitNames, text, type Grid } from "./sheets-client";
 import {
   buildAnimators,
@@ -153,7 +155,8 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
   const masterRange = `'${DASHVERSE_PFM_SHEET.tabs.master.name}'!A1:AH3000`;
   const dailyRange = `'${ANIMATION_PRODUCTIVITY_SHEET.tabs.masterData.name}'!A1:H5000`;
   const rosterRange = `'${ANIMATION_PRODUCTIVITY_SHEET.tabs.dropDowns.name}'!A1:B200`;
-  const [timeline, assetsBook, planTabs, masterBook, dailyBook] = await Promise.all([
+  const creditRange = `'${CREDIT_CONSUMPTION_SHEET.tabs.pfm.name}'!A1:T500`;
+  const [timeline, assetsBook, planTabs, masterBook, dailyBook, creditBook] = await Promise.all([
     batchGet(TIMELINE, [
       RANGES.masterTracker,
       RANGES.productionTracker,
@@ -169,6 +172,10 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
     }),
     batchGet(ANIMATION_PRODUCTIVITY_SHEET.spreadsheetId, [dailyRange, rosterRange]).catch((err) => {
       console.error("[ops] Animation productivity read failed:", err);
+      return {} as Record<string, Grid>;
+    }),
+    batchGet(CREDIT_CONSUMPTION_SHEET.spreadsheetId, [creditRange]).catch((err) => {
+      console.error("[ops] Credit consumption PFM tab read failed:", err);
       return {} as Record<string, Grid>;
     }),
   ]);
@@ -251,6 +258,8 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
     const detail = matchMasterDetail(promo, masterDetails);
     if (detail) applyMasterDetail(promo, detail);
   }
+  const creditUsages = parseCreditUsages(creditBook[creditRange] ?? []);
+  attachCreditsToPromos(promos, creditUsages);
   promos.sort((a, b) => (b.sheetIndex ?? -1) - (a.sheetIndex ?? -1));
 
   return {
@@ -291,6 +300,13 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
     planRemarks: parseRemarks(planTabs.remarks).reverse(),
     durations: parseDurations(timeline[RANGES.duration] ?? []),
     attendance,
+    creditSource: source(
+      CREDIT_CONSUMPTION_SHEET.spreadsheetId,
+      CREDIT_CONSUMPTION_SHEET.spreadsheetName,
+      CREDIT_CONSUMPTION_SHEET.tabs.pfm.name,
+      CREDIT_CONSUMPTION_SHEET.url
+    ),
+    creditUsages,
     cpsRoster: [
       ...new Set(promos.map((p) => p.cps).filter((c): c is string => Boolean(c))),
     ].sort((a, b) => a.localeCompare(b)),

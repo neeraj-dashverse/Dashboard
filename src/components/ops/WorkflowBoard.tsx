@@ -1,28 +1,50 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { findCreditForNames } from "@/lib/ops/credits";
 import { cpsLoad } from "@/lib/ops/cps-load";
 import type { IncomingPromo } from "@/lib/ops/tasks";
+import type { CreditUsage } from "@/lib/ops/types";
+import { DEMARCATE_PROMPT } from "@/lib/ops/workflow-prompt";
+import { filterWorkflowIncoming } from "@/lib/ops/workflow-queue";
+import { CreditStats } from "./CreditStats";
 import { useOps } from "./OpsProvider";
 
 type Draft = {
   promoName: string;
-  madeScripts: boolean;
   script: string;
+  gotScript: boolean;
   agencyScript: string;
   demarcatedScript: string;
   cps: string;
 };
 
+const DRAFTS_KEY = "ops-workflow-drafts";
+
 const emptyDraft = (row: IncomingPromo): Draft => ({
   promoName: row.promoName,
-  madeScripts: false,
   script: row.scriptLink ?? "",
+  gotScript: false,
   agencyScript: "",
   demarcatedScript: "",
   cps: "",
 });
+
+function loadDrafts(): Record<string, Draft> {
+  try {
+    const raw = window.localStorage.getItem(DRAFTS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, Draft>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveDrafts(drafts: Record<string, Draft>): void {
+  window.localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
+}
 
 function StepDot({ n, done, current }: { n: number; done: boolean; current: boolean }) {
   return (
@@ -40,13 +62,56 @@ function StepDot({ n, done, current }: { n: number; done: boolean; current: bool
   );
 }
 
+function Step({
+  n,
+  title,
+  done,
+  current,
+  locked,
+  children,
+}: {
+  n: number;
+  title: string;
+  done: boolean;
+  current: boolean;
+  locked: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section className={locked ? "pointer-events-none opacity-35" : ""}>
+      <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+        <StepDot n={n} done={done} current={current} />
+        {title}
+      </p>
+      {(current || done) && <div className="mt-2 pl-8">{children}</div>}
+    </section>
+  );
+}
+
+function LinkOrDash({ href, label }: { href: string; label: string }) {
+  if (!href.trim()) return <span className="text-[13px] text-slate-500">{label} —</span>;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="text-[13px] font-semibold text-[#9bb0ff] hover:underline"
+    >
+      {label} ↗
+    </a>
+  );
+}
+
 function WorkflowCard({
   row,
   draft,
   setDraft,
   cps,
+  creditUsage,
   busy,
   error,
+  copied,
+  onCopyPrompt,
   onName,
   onIntake,
 }: {
@@ -54,109 +119,197 @@ function WorkflowCard({
   draft: Draft;
   setDraft: (next: Draft) => void;
   cps: ReturnType<typeof cpsLoad>;
+  creditUsage: CreditUsage | null;
   busy: boolean;
   error: string;
+  copied: boolean;
+  onCopyPrompt: () => void;
   onName: () => void;
   onIntake: () => void;
 }) {
+  const hasScript = Boolean(draft.gotScript && draft.script.trim());
+  const hasAgency = Boolean(draft.agencyScript.trim());
+  const hasDem = Boolean(draft.demarcatedScript.trim());
   const named = Boolean(draft.promoName.trim());
-  const scriptsReady =
-    draft.madeScripts && draft.agencyScript.trim().length > 0 && draft.demarcatedScript.trim().length > 0;
-  const step = !named ? 1 : !scriptsReady ? 2 : 3;
+  const step = !hasScript ? 1 : !hasAgency ? 2 : !hasDem ? 3 : !named ? 4 : 5;
+  const pocketScript = row.scriptLink?.trim() || "";
 
   return (
     <article className="overflow-hidden rounded-2xl border border-white/[0.1] bg-[#161a26]">
       <div className="border-b border-white/[0.06] bg-[#1b2133] px-5 py-4">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">New on PocketFM</p>
         <h2 className="mt-1 text-lg font-extrabold text-white">{row.showName || "Untitled show"}</h2>
-        <p className="text-[13px] text-slate-400">
-          {named ? draft.promoName : "Promo name is missing — add it on your Master Tracker"}
-        </p>
+        <p className="text-[13px] text-slate-400">{named ? draft.promoName : "Promo name still needed before record"}</p>
+        {creditUsage && (
+          <div className="mt-3">
+            <CreditStats usage={creditUsage} compact />
+          </div>
+        )}
       </div>
 
-      <div className="space-y-5 p-5">
-        <div className="flex flex-wrap gap-4 text-[11px] text-slate-400">
-          <span className="flex items-center gap-2">
-            <StepDot n={1} done={named} current={step === 1} /> Name
-          </span>
-          <span className="flex items-center gap-2">
-            <StepDot n={2} done={scriptsReady} current={step === 2} /> Agency + demarcated
-          </span>
-          <span className="flex items-center gap-2">
-            <StepDot n={3} done={false} current={step === 3} /> Assign CP
-          </span>
+      <div className="space-y-6 p-5">
+        <div className="flex flex-wrap gap-3 text-[11px] text-slate-400">
+          {[
+            [1, "Script"],
+            [2, "Agency copy"],
+            [3, "Demarcate"],
+            [4, "Name"],
+            [5, "CP"],
+          ].map(([n, label]) => (
+            <span key={n} className="flex items-center gap-1.5">
+              <StepDot n={Number(n)} done={step > Number(n)} current={step === Number(n)} />
+              {label}
+            </span>
+          ))}
         </div>
 
-        <section>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">1 · Promo name</p>
-          {row.needsName || !named ? (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <input
-                value={draft.promoName}
-                onChange={(event) => setDraft({ ...draft, promoName: event.target.value })}
-                placeholder="Type the promo name for Master Tracker"
-                className="min-w-[220px] flex-1 rounded-lg border border-white/[0.12] bg-[#222738] px-3 py-2 text-[13px] text-white placeholder:text-slate-500"
-              />
-              <button
-                type="button"
-                disabled={busy || !draft.promoName.trim() || !row.showName.trim()}
-                onClick={onName}
-                className="rounded-lg bg-white/[0.08] px-3 py-2 text-[12px] font-bold text-white hover:bg-white/[0.12] disabled:opacity-40"
-              >
-                Save name to Master Tracker
-              </button>
-            </div>
+        <Step n={1} title="Get the original script from PocketFM" done={hasScript} current={step === 1} locked={false}>
+          {pocketScript ? (
+            <p className="text-[13px] leading-5 text-slate-400">
+              This link is column P on the PocketFM Master Sheet. Open it first — that is the source script.
+            </p>
           ) : (
-            <p className="mt-1 text-[13px] text-emerald-200">{draft.promoName}</p>
+            <p className="text-[13px] leading-5 text-amber-200/90">
+              PocketFM has no script link on this row yet. Paste it if you have it, otherwise wait for PocketFM.
+            </p>
           )}
-        </section>
-
-        <section className={named ? "" : "pointer-events-none opacity-40"}>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            2 · Make the agency copy and demarcated script
-          </p>
-          <p className="mt-1 text-[13px] leading-5 text-slate-400">
-            Before a CP is assigned, strip PocketFM from the agency copy and split the demarcated script.
-            Then paste the three links. They are saved on your Master Tracker (I–K), not the PocketFM sheet.
-          </p>
-          <label className="mt-3 flex items-start gap-2 text-[13px] text-slate-200">
-            <input
-              type="checkbox"
-              checked={draft.madeScripts}
-              onChange={(event) => setDraft({ ...draft, madeScripts: event.target.checked })}
-              className="mt-1 accent-[#4361ee]"
-            />
-            Agency copy and demarcated script are ready to paste
-          </label>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            {(
-              [
-                ["script", "Script (original)", "Paste original / working script"],
-                ["agencyScript", "Agency script", "Paste agency copy"],
-                ["demarcatedScript", "Demarcated script", "Paste demarcated script"],
-              ] as const
-            ).map(([key, label, placeholder]) => (
-              <label key={key} className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                {label}
-                <input
-                  value={draft[key]}
-                  onChange={(event) => setDraft({ ...draft, [key]: event.target.value })}
-                  placeholder={placeholder}
-                  disabled={!draft.madeScripts}
-                  className="mt-1 w-full rounded-lg border border-white/[0.12] bg-[#222738] px-3 py-2 text-[13px] font-normal normal-case tracking-normal text-white placeholder:text-slate-600 disabled:opacity-40"
-                />
-              </label>
-            ))}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {pocketScript && (
+              <a
+                href={pocketScript}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-lg bg-[#4361ee] px-3 py-2 text-[12px] font-bold text-white hover:bg-[#5470f0]"
+              >
+                Open PocketFM script
+              </a>
+            )}
+            {hasScript ? (
+              <LinkOrDash href={draft.script} label="Original script" />
+            ) : (
+              <>
+                {!pocketScript && (
+                  <input
+                    value={draft.script}
+                    onChange={(event) => setDraft({ ...draft, script: event.target.value })}
+                    placeholder="Paste the PocketFM script link if it is missing"
+                    className="min-w-[220px] flex-1 rounded-lg border border-white/[0.12] bg-[#222738] px-3 py-2 text-[13px] text-white placeholder:text-slate-500"
+                  />
+                )}
+                <button
+                  type="button"
+                  disabled={!draft.script.trim()}
+                  onClick={() => setDraft({ ...draft, gotScript: true, script: draft.script.trim() || pocketScript })}
+                  className="rounded-lg bg-white/[0.08] px-3 py-2 text-[12px] font-bold text-white hover:bg-white/[0.12] disabled:opacity-40"
+                >
+                  I have this script — next
+                </button>
+              </>
+            )}
           </div>
-        </section>
+        </Step>
 
-        <section className={scriptsReady ? "" : "pointer-events-none opacity-40"}>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            3 · Assign CP, then record to Master Tracker
+        <Step
+          n={2}
+          title="Make a Google copy — that is the agency script"
+          done={hasAgency}
+          current={step === 2}
+          locked={step < 2}
+        >
+          <p className="text-[13px] leading-5 text-slate-400">
+            In the original script: File → Make a copy (Google Sheet or Doc). Strip every PocketFM mention. Paste
+            that copy’s link here. This becomes Master Tracker · Agency script (J).
           </p>
-          <p className="mt-1 text-[13px] text-slate-400">
-            Current open load is shown so you can pick who has room.
+          {hasAgency ? (
+            <p className="mt-2">
+              <LinkOrDash href={draft.agencyScript} label="Agency script" />
+            </p>
+          ) : (
+            <input
+              value={draft.agencyScript}
+              onChange={(event) => setDraft({ ...draft, agencyScript: event.target.value })}
+              placeholder="Paste the Google copy link"
+              className="mt-2 w-full rounded-lg border border-white/[0.12] bg-[#222738] px-3 py-2 text-[13px] text-white placeholder:text-slate-500"
+            />
+          )}
+        </Step>
+
+        <Step
+          n={3}
+          title="Demarcate that agency copy with the prompt"
+          done={hasDem}
+          current={step === 3}
+          locked={step < 3}
+        >
+          <p className="text-[13px] leading-5 text-slate-400">
+            Use the agency copy only. Copy the prompt, run it on that copy, then paste the demarcated file link.
           </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onCopyPrompt}
+              className="rounded-lg bg-white/[0.08] px-3 py-2 text-[12px] font-bold text-white hover:bg-white/[0.12]"
+            >
+              {copied ? "Prompt copied" : "Copy demarcation prompt"}
+            </button>
+            {draft.agencyScript && (
+              <a
+                href={draft.agencyScript}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-lg px-3 py-2 text-[12px] font-bold text-[#9bb0ff] hover:underline"
+              >
+                Agency copy ↗
+              </a>
+            )}
+          </div>
+          <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border border-white/[0.08] bg-black/30 p-3 text-[11px] leading-4 text-slate-400">
+            {DEMARCATE_PROMPT}
+          </pre>
+          {hasDem ? (
+            <p className="mt-2">
+              <LinkOrDash href={draft.demarcatedScript} label="Demarcated script" />
+            </p>
+          ) : (
+            <input
+              value={draft.demarcatedScript}
+              onChange={(event) => setDraft({ ...draft, demarcatedScript: event.target.value })}
+              placeholder="Paste the demarcated script link"
+              className="mt-2 w-full rounded-lg border border-white/[0.12] bg-[#222738] px-3 py-2 text-[13px] text-white placeholder:text-slate-500"
+            />
+          )}
+        </Step>
+
+        <Step n={4} title="Promo name on Master Tracker" done={named} current={step === 4} locked={step < 4}>
+          {named && !row.needsName ? (
+            <p className="text-[13px] text-emerald-200">{draft.promoName}</p>
+          ) : (
+            <>
+              <p className="text-[13px] leading-5 text-slate-400">
+                PocketFM left the promo name blank. Add it here — it writes to your Master Tracker, not PocketFM.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <input
+                  value={draft.promoName}
+                  onChange={(event) => setDraft({ ...draft, promoName: event.target.value })}
+                  placeholder="Promo name"
+                  className="min-w-[220px] flex-1 rounded-lg border border-white/[0.12] bg-[#222738] px-3 py-2 text-[13px] text-white placeholder:text-slate-500"
+                />
+                <button
+                  type="button"
+                  disabled={busy || !draft.promoName.trim() || !row.showName.trim()}
+                  onClick={onName}
+                  className="rounded-lg bg-white/[0.08] px-3 py-2 text-[12px] font-bold text-white hover:bg-white/[0.12] disabled:opacity-40"
+                >
+                  Save name to Master Tracker
+                </button>
+              </div>
+            </>
+          )}
+        </Step>
+
+        <Step n={5} title="Assign CP, then record" done={false} current={step === 5} locked={step < 5}>
+          <p className="text-[13px] text-slate-400">Original, agency, and demarcated links go to Master Tracker I–K.</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {cps.map((person) => {
               const selected = draft.cps === person.name;
@@ -188,9 +341,7 @@ function WorkflowCard({
                           {promo.title}
                         </li>
                       ))}
-                      {person.openPromos.length > 4 && (
-                        <li>+{person.openPromos.length - 4} more</li>
-                      )}
+                      {person.openPromos.length > 4 && <li>+{person.openPromos.length - 4} more</li>}
                     </ul>
                   )}
                 </button>
@@ -199,13 +350,13 @@ function WorkflowCard({
           </div>
           <button
             type="button"
-            disabled={busy || !scriptsReady || !draft.cps || !named}
+            disabled={busy || step < 5 || !draft.cps}
             onClick={onIntake}
             className="mt-4 w-full rounded-xl bg-[#4361ee] px-4 py-2.5 text-[13px] font-bold text-white hover:bg-[#5470f0] disabled:opacity-40"
           >
             Record to Master Tracker
           </button>
-        </section>
+        </Step>
 
         {error && <p className="text-[12px] text-rose-300">{error}</p>}
       </div>
@@ -220,7 +371,12 @@ export function WorkflowBoard() {
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
   const cps = useMemo(() => cpsLoad(snap), [snap]);
+
+  useEffect(() => {
+    setDrafts(loadDrafts());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -232,11 +388,16 @@ export function WorkflowBoard() {
       .then((res) => res.json())
       .then((data: { incoming?: IncomingPromo[] }) => {
         if (cancelled) return;
-        const rows = data.incoming ?? [];
+        const rows = filterWorkflowIncoming(data.incoming ?? [], snap);
         setIncoming(rows);
         setDrafts((current) => {
           const next = { ...current };
-          for (const row of rows) if (!next[row.id]) next[row.id] = emptyDraft(row);
+          for (const row of rows) {
+            if (!next[row.id]) next[row.id] = emptyDraft(row);
+            else if (!next[row.id].script && row.scriptLink) next[row.id] = { ...next[row.id], script: row.scriptLink };
+            if (!next[row.id].promoName && row.promoName) next[row.id] = { ...next[row.id], promoName: row.promoName };
+          }
+          saveDrafts(next);
           return next;
         });
         setPicked((current) => (rows.some((row) => row.id === current) ? current : rows[0]?.id || ""));
@@ -254,8 +415,20 @@ export function WorkflowBoard() {
 
   function patch(next: Draft) {
     if (!active) return;
-    setDrafts((current) => ({ ...current, [active.id]: next }));
+    const updated = { ...drafts, [active.id]: next };
+    setDrafts(updated);
+    saveDrafts(updated);
     setError("");
+  }
+
+  async function copyPrompt() {
+    try {
+      await navigator.clipboard.writeText(DEMARCATE_PROMPT);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Could not copy the prompt — select it from the box below.");
+    }
   }
 
   async function post(body: Record<string, unknown>) {
@@ -274,7 +447,7 @@ export function WorkflowBoard() {
       }
       await reset();
     } catch {
-      setError("Could not write to the sheet.");
+      setError("Could not write to Master Tracker.");
     } finally {
       setBusy(false);
     }
@@ -286,8 +459,8 @@ export function WorkflowBoard() {
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Intake</p>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Workflow</h1>
         <p className="mt-1 max-w-2xl text-[13px] leading-5 text-slate-400">
-          New PocketFM row → name it if blank → make agency + demarcated scripts → paste links → pick a
-          CP → everything is written to your Master Tracker.
+          One step at a time: PocketFM script → Google copy as agency script → demarcate with the prompt →
+          name if blank → assign CP. Links save to your Master Tracker.
         </p>
       </div>
 
@@ -332,10 +505,13 @@ export function WorkflowBoard() {
             <WorkflowCard
               row={active}
               draft={draft}
+              creditUsage={findCreditForNames(snap.creditUsages ?? [], active.showName, draft.promoName || active.promoName)}
               setDraft={patch}
               cps={cps}
               busy={busy}
               error={error}
+              copied={copied}
+              onCopyPrompt={copyPrompt}
               onName={() =>
                 post({
                   action: "name",

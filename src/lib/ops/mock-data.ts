@@ -1,5 +1,6 @@
 import {
   ANIMATION_PRODUCTIVITY_SHEET,
+  CREDIT_CONSUMPTION_SHEET,
   DASHVERSE_PFM_SHEET,
   DURATION_WORKED_BUCKETS,
   PFM_ASSETS_SHEET,
@@ -8,6 +9,7 @@ import {
 import type {
   Animator,
   AssetTeamRow,
+  CreditUsage,
   DailyThroughputLog,
   Part,
   PipelineStage,
@@ -48,6 +50,13 @@ export const MOCK_THROUGHPUT_SOURCE: SheetSource = {
   spreadsheetName: ANIMATION_PRODUCTIVITY_SHEET.spreadsheetName,
   masterTab: ANIMATION_PRODUCTIVITY_SHEET.tabs.masterData.name,
   url: ANIMATION_PRODUCTIVITY_SHEET.url,
+};
+
+export const MOCK_CREDIT_SOURCE: SheetSource = {
+  spreadsheetId: CREDIT_CONSUMPTION_SHEET.spreadsheetId,
+  spreadsheetName: CREDIT_CONSUMPTION_SHEET.spreadsheetName,
+  masterTab: CREDIT_CONSUMPTION_SHEET.tabs.pfm.name,
+  url: CREDIT_CONSUMPTION_SHEET.url,
 };
 
 /**
@@ -186,6 +195,7 @@ function promo(
     lastTrackerUpdateAt: fields.lastTrackerUpdateAt ?? null,
     assetTeam: fields.assetTeam ?? null,
     preProd: fields.preProd ?? null,
+    creditUsage: fields.creditUsage ?? null,
   };
 }
 
@@ -265,6 +275,31 @@ export const MOCK_PROMOS: Promo[] = [
     remarks: "CP still pending on part 2",
     totalAssetMade: 132,
     creditPerMinInhouse: 8.1,
+    creditUsage: {
+      id: "mock-hcq-credits",
+      showId1: "SHO-HCQ",
+      showId2: null,
+      label: "PFM - HCQ - House Party Wakanda-Promo",
+      conceptType: null,
+      videos: 1200,
+      llm: 88000,
+      images: 210000,
+      audio: 9000,
+      lipSync: 80159,
+      totalCredits: 388359,
+      costUsd: 3883.59,
+      videoSavedCount: 12,
+      durationMin: 48,
+      productionCostPerMin: 80.91,
+      partsCompleted: 2,
+      partsInProduction: 3,
+      status: "In-Production",
+      runtime: 48,
+      runtimeCostPerMin: 80.91,
+      yieldPct: 62,
+      matchedPromoId: promoJoinKey("HCQ", "House Party Wait"),
+      matchScore: 90,
+    },
     lastTrackerUpdateAt: "2026-10-26",
     workingScriptLink: "https://docs.google.com/document/d/mock-hcq-script",
     agencyScriptLink: null, // nudge: missing agency script
@@ -526,6 +561,10 @@ function part(
     flagged: partial.flagged ?? false,
   };
 }
+
+export const MOCK_CREDIT_USAGES: CreditUsage[] = MOCK_PROMOS.map((promo) => promo.creditUsage).filter(
+  (row): row is CreditUsage => Boolean(row)
+);
 
 export const MOCK_PARTS: Part[] = [
   part({

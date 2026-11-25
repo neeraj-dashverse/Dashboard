@@ -130,6 +130,7 @@ export function parsePromos(rows: Grid): Promo[] {
       lastTrackerUpdateAt: null,
       assetTeam: null,
       preProd: null,
+      creditUsage: null,
     });
   }
   return promos;
@@ -289,6 +290,7 @@ export function stubPromo(showName: string, scriptName: string): Promo {
     lastTrackerUpdateAt: null,
     assetTeam: null,
     preProd: null,
+    creditUsage: null,
   };
 }
 

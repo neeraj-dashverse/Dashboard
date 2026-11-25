@@ -1,6 +1,8 @@
 import {
   MOCK_ANIMATORS,
   MOCK_ASSETS_SOURCE,
+  MOCK_CREDIT_SOURCE,
+  MOCK_CREDIT_USAGES,
   MOCK_DAILY_LOGS,
   MOCK_PARTS,
   MOCK_PROMOS,
@@ -39,6 +41,8 @@ function seed(): OpsSnapshot {
     planRemarks: [],
     durations: [],
     attendance: [],
+    creditSource: structuredClone(MOCK_CREDIT_SOURCE),
+    creditUsages: structuredClone(MOCK_CREDIT_USAGES),
     cpsRoster: [
       ...new Set(
         MOCK_PROMOS.map((p) => p.cps).filter((c): c is string => Boolean(c))

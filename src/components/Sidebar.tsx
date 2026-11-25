@@ -12,6 +12,7 @@ const navItems = [
   { href: "/team", label: "Team", icon: "☰" },
   { href: "/productivity", label: "Productivity", icon: "◈" },
   { href: "/record", label: "Record", icon: "≡" },
+  { href: "/credits", label: "Credits", icon: "◉" },
   { href: "/agency", label: "Agency", icon: "⧉" },
 ];
 
@@ -104,6 +105,9 @@ export function Sidebar() {
                 { label: "Master Sheet", source: snap.source },
                 { label: "Assets", source: snap.assetsSource },
                 { label: "Animation productivity", source: snap.throughputSource },
+                ...(snap.creditSource
+                  ? [{ label: "Credits PFM", source: snap.creditSource }]
+                  : []),
               ].map((row) => (
                 <a
                   key={row.label}
