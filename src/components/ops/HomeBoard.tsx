@@ -7,7 +7,7 @@ import { loadOutsidePlots, saveOutsidePlots, plotForName, type OutsidePlot } fro
 import { formatDmy } from "@/lib/ops/selectors";
 import type { IncomingPromo } from "@/lib/ops/tasks";
 import { fetchIncoming } from "@/lib/ops/incoming-client";
-import { filterWorkflowIncoming } from "@/lib/ops/workflow-queue";
+import { filterWorkflowIncoming, incompleteHandoffs } from "@/lib/ops/workflow-queue";
 import { Kpi, SectionTitle } from "./ui";
 import { useOps } from "./OpsProvider";
 
@@ -19,6 +19,7 @@ export function HomeBoard() {
   const [formError, setFormError] = useState("");
   const leaves = useMemo(() => homeLeaves(snap), [snap]);
   const delays = useMemo(() => homeDelays(snap), [snap]);
+  const gaps = useMemo(() => incompleteHandoffs(snap), [snap]);
   const sheetFree = useMemo(() => homeFree(snap), [snap]);
   const followUp = useMemo(
     () => plots.filter((plot) => plot.until <= snap.today),
@@ -179,6 +180,37 @@ export function HomeBoard() {
           </div>
         )}
       </section>
+
+      {gaps.length > 0 && (
+        <section className="space-y-2">
+          <SectionTitle
+            title="Named, still missing CP / scripts"
+            hint="Paste the missing CP and links in Workflow — I upload them to Master Tracker"
+            count={gaps.length}
+          />
+          <div className="rounded-xl border border-amber-500/20 bg-[#1b1814] px-4 py-3">
+            <ul className="space-y-1.5">
+              {gaps.slice(0, 6).map((row) => (
+                <li key={row.promoId} className="text-[13px] text-slate-200">
+                  <span className="font-semibold text-white">
+                    {row.showName} · {row.promoName}
+                  </span>
+                  <span className="text-amber-200/80"> · need {row.missing.join(", ")}</span>
+                </li>
+              ))}
+            </ul>
+            {gaps.length > 6 && (
+              <p className="mt-1 text-[11px] text-slate-500">+{gaps.length - 6} more</p>
+            )}
+            <Link
+              href="/workflow"
+              className="mt-3 inline-block rounded-md bg-[#4361ee] px-3 py-1.5 text-[12px] font-bold text-white hover:bg-[#5470f0]"
+            >
+              Paste and upload
+            </Link>
+          </div>
+        </section>
+      )}
 
       <section className="space-y-2">
         <SectionTitle

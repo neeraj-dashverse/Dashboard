@@ -8,7 +8,7 @@ import { cpsLoad } from "@/lib/ops/cps-load";
 import type { IncomingPromo } from "@/lib/ops/tasks";
 import type { CreditUsage } from "@/lib/ops/types";
 import { DEMARCATE_PROMPT } from "@/lib/ops/workflow-prompt";
-import { filterWorkflowIncoming } from "@/lib/ops/workflow-queue";
+import { filterWorkflowIncoming, incompleteHandoffs, type HandoffGap } from "@/lib/ops/workflow-queue";
 import { CreditStats } from "./CreditStats";
 import { useOps } from "./OpsProvider";
 
@@ -370,6 +370,120 @@ function WorkflowCard({
   );
 }
 
+function FillHandoffCard({
+  row,
+  cps,
+  busy,
+  error,
+  onUpload,
+}: {
+  row: HandoffGap;
+  cps: ReturnType<typeof cpsLoad>;
+  busy: boolean;
+  error: string;
+  onUpload: (patch: { cps: string; script: string; agencyScript: string; demarcatedScript: string }) => void;
+}) {
+  const [cpsName, setCpsName] = useState(row.cps ?? "");
+  const [script, setScript] = useState(row.scriptLink ?? "");
+  const [agencyScript, setAgencyScript] = useState(row.agencyScriptLink ?? "");
+  const [demarcatedScript, setDemarcatedScript] = useState(row.demarcatedScriptLink ?? "");
+
+  const needCps = !row.cps;
+  const needScript = !row.scriptLink;
+  const needAgency = !row.agencyScriptLink;
+  const needDem = !row.demarcatedScriptLink;
+  const ready =
+    (needCps && cpsName.trim()) ||
+    (needScript && script.trim()) ||
+    (needAgency && agencyScript.trim()) ||
+    (needDem && demarcatedScript.trim());
+
+  return (
+    <article className="overflow-hidden rounded-2xl border border-amber-500/20 bg-[#1b1814]">
+      <div className="border-b border-amber-500/15 bg-[#2a2218] px-5 py-4">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-500/80">Named — still missing</p>
+        <h2 className="mt-1 text-lg font-extrabold text-white">
+          {row.showName} · {row.promoName}
+        </h2>
+        <p className="mt-1 text-[13px] text-amber-100/80">Paste what I listed, then upload. It writes to Master Tracker.</p>
+        <p className="mt-2 text-[12px] font-semibold text-amber-200">Still need: {row.missing.join(" · ")}</p>
+      </div>
+      <div className="space-y-4 p-5">
+        {needCps && (
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">CP name</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {cps.map((person) => (
+                <button
+                  key={person.name}
+                  type="button"
+                  onClick={() => setCpsName(person.name)}
+                  className={`rounded-lg px-3 py-1.5 text-[12px] font-bold ${
+                    cpsName === person.name
+                      ? "bg-[#4361ee] text-white"
+                      : "bg-white/[0.08] text-slate-300 hover:bg-white/[0.12]"
+                  }`}
+                >
+                  {person.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {needScript && (
+          <label className="block">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Original script</span>
+            <input
+              value={script}
+              onChange={(event) => setScript(event.target.value)}
+              placeholder="Paste the script link"
+              className="mt-1 w-full rounded-lg border border-white/[0.12] bg-[#222738] px-3 py-2 text-[13px] text-white placeholder:text-slate-500"
+            />
+          </label>
+        )}
+        {needAgency && (
+          <label className="block">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Agency script</span>
+            <input
+              value={agencyScript}
+              onChange={(event) => setAgencyScript(event.target.value)}
+              placeholder="Paste the agency copy link"
+              className="mt-1 w-full rounded-lg border border-white/[0.12] bg-[#222738] px-3 py-2 text-[13px] text-white placeholder:text-slate-500"
+            />
+          </label>
+        )}
+        {needDem && (
+          <label className="block">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Demarcated script</span>
+            <input
+              value={demarcatedScript}
+              onChange={(event) => setDemarcatedScript(event.target.value)}
+              placeholder="Paste the demarcated script link"
+              className="mt-1 w-full rounded-lg border border-white/[0.12] bg-[#222738] px-3 py-2 text-[13px] text-white placeholder:text-slate-500"
+            />
+          </label>
+        )}
+        <button
+          type="button"
+          disabled={busy || !ready}
+          onClick={() =>
+            onUpload({
+              cps: needCps ? cpsName : "",
+              script: needScript ? script : "",
+              agencyScript: needAgency ? agencyScript : "",
+              demarcatedScript: needDem ? demarcatedScript : "",
+            })
+          }
+          className="w-full rounded-xl bg-[#4361ee] px-4 py-2.5 text-[13px] font-bold text-white hover:bg-[#5470f0] disabled:opacity-40"
+        >
+          Upload to Master Tracker
+        </button>
+        {error && <p className="text-[12px] text-rose-300">{error}</p>}
+      </div>
+    </article>
+  );
+}
+
 export function WorkflowBoard() {
   const { snap, reset } = useOps();
   const [incoming, setIncoming] = useState<IncomingPromo[] | null>(null);
@@ -379,6 +493,9 @@ export function WorkflowBoard() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const cps = useMemo(() => cpsLoad(snap), [snap]);
+  const gaps = useMemo(() => incompleteHandoffs(snap), [snap]);
+  const [gapId, setGapId] = useState("");
+  const activeGap = gaps.find((row) => row.promoId === gapId) ?? gaps[0] ?? null;
 
   useEffect(() => {
     setDrafts(loadDrafts());
@@ -463,9 +580,56 @@ export function WorkflowBoard() {
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Workflow</h1>
         <p className="mt-1 max-w-2xl text-[13px] leading-5 text-slate-400">
           One step at a time: PocketFM script → Google copy as agency script → demarcate with the prompt →
-          name if blank → assign CP. Links save to your Master Tracker.
+          name if blank → assign CP. If you already named a promo, I list what is still missing so you can
+          paste it and I upload it to Master Tracker.
         </p>
       </div>
+
+      {gaps.length > 0 && (
+        <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
+          <aside className="space-y-1">
+            <p className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-amber-500/80">
+              Named · missing {gaps.length}
+            </p>
+            {gaps.map((row) => {
+              const selected = (activeGap?.promoId ?? "") === row.promoId;
+              return (
+                <button
+                  key={row.promoId}
+                  type="button"
+                  onClick={() => {
+                    setGapId(row.promoId);
+                    setError("");
+                  }}
+                  className={`w-full rounded-xl px-3 py-2.5 text-left ${
+                    selected ? "bg-amber-500/15 text-white" : "text-slate-300 hover:bg-white/[0.04]"
+                  }`}
+                >
+                  <p className="truncate text-[13px] font-semibold">{row.showName}</p>
+                  <p className="truncate text-[11px] text-amber-200/80">{row.missing.join(" · ")}</p>
+                </button>
+              );
+            })}
+          </aside>
+          {activeGap && (
+            <FillHandoffCard
+              key={activeGap.promoId}
+              row={activeGap}
+              cps={cps}
+              busy={busy}
+              error={error}
+              onUpload={(patch) =>
+                post({
+                  action: "handoff",
+                  showName: activeGap.showName,
+                  promoName: activeGap.promoName,
+                  ...patch,
+                })
+              }
+            />
+          )}
+        </div>
+      )}
 
       {incoming == null ? (
         <p className="rounded-xl border border-dashed border-white/[0.1] px-4 py-8 text-center text-[13px] text-slate-500">

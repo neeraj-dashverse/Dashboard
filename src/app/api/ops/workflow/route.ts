@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getRole } from "@/lib/auth/allowed-users";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { opsAdapter } from "@/lib/ops/adapter";
-import { writeTrackerIntake, writeTrackerPromoName } from "@/lib/ops/workflow-write";
+import { writeTrackerHandoff, writeTrackerIntake, writeTrackerPromoName } from "@/lib/ops/workflow-write";
 
 async function requireAdmin(): Promise<string | null> {
   const supabase = createServerSupabase();
@@ -39,6 +39,15 @@ export async function POST(request: Request) {
       await writeTrackerPromoName(String(body.showName ?? ""), String(body.promoName ?? ""));
     } else if (body?.action === "intake") {
       await writeTrackerIntake({
+        showName: String(body.showName ?? ""),
+        promoName: String(body.promoName ?? ""),
+        cps: String(body.cps ?? ""),
+        script: String(body.script ?? ""),
+        agencyScript: String(body.agencyScript ?? ""),
+        demarcatedScript: String(body.demarcatedScript ?? ""),
+      });
+    } else if (body?.action === "handoff") {
+      await writeTrackerHandoff({
         showName: String(body.showName ?? ""),
         promoName: String(body.promoName ?? ""),
         cps: String(body.cps ?? ""),

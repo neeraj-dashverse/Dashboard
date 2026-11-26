@@ -93,3 +93,48 @@ export async function writeTrackerIntake(
   const after = await findTrackerRow(showName, promoName);
   return { trackerRow: after ?? 0, promoId: promoJoinKey(showName, promoName) };
 }
+
+export type TrackerHandoffPatch = {
+  showName: string;
+  promoName: string;
+  cps?: string;
+  script?: string;
+  agencyScript?: string;
+  demarcatedScript?: string;
+};
+
+/** Fill CP and script links on an already-named Master Tracker row. Only writes what was pasted. */
+export async function writeTrackerHandoff(
+  patch: TrackerHandoffPatch
+): Promise<{ trackerRow: number; promoId: string }> {
+  if (!hasSheetCredentials()) throw new Error("Google Sheets credentials are missing.");
+  const showName = patch.showName.trim();
+  const promoName = patch.promoName.trim();
+  const cps = patch.cps?.trim() ?? "";
+  const script = patch.script?.trim() ?? "";
+  const agencyScript = patch.agencyScript?.trim() ?? "";
+  const demarcatedScript = patch.demarcatedScript?.trim() ?? "";
+  if (!showName || !promoName) throw new Error("Show and promo name are required.");
+  if (!cps && !script && !agencyScript && !demarcatedScript) {
+    throw new Error("Paste a CP name or a script link first.");
+  }
+
+  const tab = PFM_TIMELINE_SHEET.tabs.masterTracker.name;
+  const existing = await findTrackerRow(showName, promoName);
+  if (!existing) throw new Error("This promo is not on Master Tracker yet. Save the name first.");
+
+  const range = `'${tab}'!A${existing}:K${existing}`;
+  const book = await batchGet(PFM_TIMELINE_SHEET.spreadsheetId, [range]);
+  const current = [...(book[range]?.[0] ?? [])];
+  while (current.length < 11) current.push("");
+  current[0] = showName;
+  current[1] = promoName;
+  if (!String(current[2] ?? "").trim()) current[2] = "WIP";
+  if (cps) current[4] = cps;
+  if (script) current[8] = script;
+  if (agencyScript) current[9] = agencyScript;
+  if (demarcatedScript) current[10] = demarcatedScript;
+
+  await updateSheetValues(PFM_TIMELINE_SHEET.spreadsheetId, range, [current]);
+  return { trackerRow: existing, promoId: promoJoinKey(showName, promoName) };
+}
