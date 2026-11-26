@@ -21,7 +21,11 @@ async function requireAdminForWrites(): Promise<string | null> {
 
 export async function GET() {
   const snapshot = await opsAdapter.load();
-  return NextResponse.json(snapshot);
+  return NextResponse.json(snapshot, {
+    headers: {
+      "Cache-Control": "private, max-age=30, stale-while-revalidate=120",
+    },
+  });
 }
 
 export async function POST(request: Request) {

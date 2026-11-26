@@ -6,6 +6,7 @@ import { homeDelays, homeFree, homeLeaves, type HomeFree } from "@/lib/ops/home"
 import { loadOutsidePlots, saveOutsidePlots, plotForName, type OutsidePlot } from "@/lib/ops/outside-plots";
 import { formatDmy } from "@/lib/ops/selectors";
 import type { IncomingPromo } from "@/lib/ops/tasks";
+import { fetchIncoming } from "@/lib/ops/incoming-client";
 import { filterWorkflowIncoming } from "@/lib/ops/workflow-queue";
 import { Kpi, SectionTitle } from "./ui";
 import { useOps } from "./OpsProvider";
@@ -45,16 +46,12 @@ export function HomeBoard() {
   }, []);
 
   useEffect(() => {
+    if (!snap.live) return;
     let cancelled = false;
-    fetch("/api/ops/incoming", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ knownIds: snap.promos.map((promo) => promo.id) }),
-    })
-      .then((res) => res.json())
-      .then((data: { incoming?: IncomingPromo[] }) => {
+    fetchIncoming(snap.promos.map((promo) => promo.id))
+      .then((rows) => {
         if (cancelled) return;
-        setIncoming(filterWorkflowIncoming(data.incoming ?? [], snap));
+        setIncoming(filterWorkflowIncoming(rows, snap));
       })
       .catch(() => {
         if (!cancelled) setIncoming([]);

@@ -1,11 +1,11 @@
 import { headers } from "next/headers";
 import { Sidebar } from "@/components/Sidebar";
 import { HeaderBar } from "@/components/HeaderBar";
-import { OpsProvider } from "@/components/ops/OpsProvider";
+import { BootGate, OpsProvider } from "@/components/ops/OpsProvider";
 import { AuthProvider } from "@/components/auth/AuthProvider";
-import { opsAdapter } from "@/lib/ops/adapter";
 import { getRole } from "@/lib/auth/allowed-users";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { getSnapshot } from "@/lib/ops/store";
 import "./globals.css";
 import type { Metadata } from "next";
 
@@ -63,7 +63,9 @@ export default async function RootLayout({
     );
   }
 
-  const snap = await opsAdapter.load();
+  // Do not await Google Sheets here — that is why every tab change felt slow.
+  // Sheets load once on the client (and stay in OpsProvider across navigations).
+  const snap = getSnapshot();
 
   return (
     <html lang="en">
@@ -75,7 +77,9 @@ export default async function RootLayout({
                 <Sidebar />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <HeaderBar />
-                  <main className="flex-1 overflow-y-auto px-5 py-5 lg:px-7 lg:py-6">{children}</main>
+                  <main className="flex-1 overflow-y-auto px-5 py-5 lg:px-7 lg:py-6">
+                    <BootGate>{children}</BootGate>
+                  </main>
                 </div>
               </div>
             </div>

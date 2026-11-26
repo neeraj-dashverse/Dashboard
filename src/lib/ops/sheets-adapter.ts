@@ -314,7 +314,7 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
 }
 
 /** Reuse one sheet read across tab changes. Refresh still pulls a new copy. */
-const SHEET_CACHE_MS = 60_000;
+const SHEET_CACHE_MS = 5 * 60_000;
 let sheetCache: { at: number; snap: OpsSnapshot } | null = null;
 let sheetInflight: Promise<OpsSnapshot> | null = null;
 

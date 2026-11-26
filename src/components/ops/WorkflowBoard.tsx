@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { creditCompare, findCreditForNames } from "@/lib/ops/credits";
+import { bustIncomingCache, fetchIncoming } from "@/lib/ops/incoming-client";
 import { cpsLoad } from "@/lib/ops/cps-load";
 import type { IncomingPromo } from "@/lib/ops/tasks";
 import type { CreditUsage } from "@/lib/ops/types";
@@ -384,16 +385,12 @@ export function WorkflowBoard() {
   }, []);
 
   useEffect(() => {
+    if (!snap.live) return;
     let cancelled = false;
-    fetch("/api/ops/incoming", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ knownIds: snap.promos.map((promo) => promo.id) }),
-    })
-      .then((res) => res.json())
-      .then((data: { incoming?: IncomingPromo[] }) => {
+    fetchIncoming(snap.promos.map((promo) => promo.id))
+      .then((data) => {
         if (cancelled) return;
-        const rows = filterWorkflowIncoming(data.incoming ?? [], snap);
+        const rows = filterWorkflowIncoming(data, snap);
         setIncoming(rows);
         setDrafts((current) => {
           const next = { ...current };
@@ -413,7 +410,7 @@ export function WorkflowBoard() {
     return () => {
       cancelled = true;
     };
-  }, [snap.promos]);
+  }, [snap.promos, snap.live]);
 
   const active = incoming?.find((row) => row.id === picked) ?? incoming?.[0] ?? null;
   const draft = active ? drafts[active.id] ?? emptyDraft(active) : null;
@@ -450,6 +447,7 @@ export function WorkflowBoard() {
         setError(data.error || "Could not write to Master Tracker.");
         return;
       }
+      bustIncomingCache();
       await reset();
     } catch {
       setError("Could not write to Master Tracker.");
