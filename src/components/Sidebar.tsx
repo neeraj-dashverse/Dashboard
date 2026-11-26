@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { fetchIncoming } from "@/lib/ops/incoming-client";
+import { filterWorkflowIncoming, incompleteHandoffs } from "@/lib/ops/workflow-queue";
 import { useOps } from "./ops/OpsProvider";
 
 const navItems = [
@@ -26,12 +28,30 @@ export function Sidebar() {
   const { snap } = useOps();
   const [pathname, setPathname] = useState("");
   const [open, setOpen] = useState(true);
+  const [newCount, setNewCount] = useState(0);
+  const gapCount = useMemo(() => (snap.live ? incompleteHandoffs(snap).length : 0), [snap]);
+  const workflowBadge = newCount + gapCount;
 
   useEffect(() => {
     setPathname(window.location.pathname);
     const saved = window.localStorage.getItem("ops-nav-open");
     if (saved === "0") setOpen(false);
   }, []);
+
+  useEffect(() => {
+    if (!snap.live) return;
+    let cancelled = false;
+    fetchIncoming(snap.promos.map((promo) => promo.id))
+      .then((rows) => {
+        if (!cancelled) setNewCount(filterWorkflowIncoming(rows, snap).length);
+      })
+      .catch(() => {
+        if (!cancelled) setNewCount(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [snap.promos, snap.live]);
 
   function toggle() {
     setOpen((value) => {
@@ -87,6 +107,11 @@ export function Sidebar() {
                   )}
                   <span className="text-base">{item.icon}</span>
                   {item.label}
+                  {item.href === "/workflow" && workflowBadge > 0 && (
+                    <span className="ml-auto rounded-full bg-[#4361ee] px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      {workflowBadge}
+                    </span>
+                  )}
                 </Link>
               );
             })}

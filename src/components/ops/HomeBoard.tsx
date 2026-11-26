@@ -8,6 +8,7 @@ import { formatDmy } from "@/lib/ops/selectors";
 import type { IncomingPromo } from "@/lib/ops/tasks";
 import { fetchIncoming } from "@/lib/ops/incoming-client";
 import { filterWorkflowIncoming, incompleteHandoffs } from "@/lib/ops/workflow-queue";
+import { IncomingPacket } from "./IncomingPacket";
 import { Kpi, SectionTitle } from "./ui";
 import { useOps } from "./OpsProvider";
 
@@ -184,18 +185,34 @@ export function HomeBoard() {
       {gaps.length > 0 && (
         <section className="space-y-2">
           <SectionTitle
-            title="Named, still missing CP / scripts"
-            hint="Paste the missing CP and links in Workflow — I upload them to Master Tracker"
+            title="Master Tracker · named, still empty"
+            hint="Only rows on your Master Tracker with blank CP or script columns — paste in Workflow"
             count={gaps.length}
           />
           <div className="rounded-xl border border-amber-500/20 bg-[#1b1814] px-4 py-3">
             <ul className="space-y-1.5">
               {gaps.slice(0, 6).map((row) => (
-                <li key={row.promoId} className="text-[13px] text-slate-200">
-                  <span className="font-semibold text-white">
-                    {row.showName} · {row.promoName}
-                  </span>
-                  <span className="text-amber-200/80"> · need {row.missing.join(", ")}</span>
+                <li key={row.promoId} className="space-y-1.5 text-[13px] text-slate-200">
+                  <p>
+                    <span className="font-semibold text-white">
+                      {row.showName} · {row.promoName}
+                    </span>
+                    <span className="text-amber-200/80"> · need {row.missing.join(", ")}</span>
+                  </p>
+                  <IncomingPacket
+                    row={{
+                      id: row.promoId,
+                      showName: row.showName,
+                      promoName: row.promoName,
+                      scriptLink: row.pocketFmScript,
+                      voSamples: row.voSamples,
+                      videoSamples: row.videoSamples,
+                      canvasLink: row.canvasLink,
+                      showLink: row.showLink,
+                      synopsisLink: row.synopsisLink,
+                    }}
+                    compact
+                  />
                 </li>
               ))}
             </ul>
@@ -214,8 +231,8 @@ export function HomeBoard() {
 
       <section className="space-y-2">
         <SectionTitle
-          title="New promos on PocketFM"
-          hint="Workflow: PocketFM script → Google agency copy → demarcate → CP → Master Tracker"
+          title="New on PocketFM Master Sheet"
+          hint="Assigned to the sheet — script, VO, video samples, and the rest. If a script is there, make a copy in Workflow."
           count={incoming?.length}
         />
         {incoming == null ? (
@@ -223,23 +240,29 @@ export function HomeBoard() {
         ) : incoming.length === 0 ? (
           <Empty>No new promo is waiting in Workflow.</Empty>
         ) : (
-          <div className="rounded-xl border border-white/[0.08] bg-[#222738] px-4 py-3">
-            <ul className="space-y-1.5">
-              {incoming.slice(0, 4).map((row) => (
-                <li key={row.id} className="text-[13px] text-slate-200">
+          <div className="space-y-2">
+            {incoming.slice(0, 4).map((row) => (
+              <div
+                key={row.id}
+                className="rounded-xl border border-[#4361ee]/25 bg-[#1b2133] px-4 py-3"
+              >
+                <p className="text-[13px] text-slate-200">
                   <span className="font-semibold text-white">{row.showName}</span>
                   <span className="text-slate-400">
                     {row.needsName ? " · needs a promo name" : row.promoName ? ` · ${row.promoName}` : ""}
                   </span>
-                </li>
-              ))}
-            </ul>
+                </p>
+                <div className="mt-2">
+                  <IncomingPacket row={row} compact />
+                </div>
+              </div>
+            ))}
             {incoming.length > 4 && (
-              <p className="mt-1 text-[11px] text-slate-500">+{incoming.length - 4} more</p>
+              <p className="text-[11px] text-slate-500">+{incoming.length - 4} more</p>
             )}
             <Link
               href="/workflow"
-              className="mt-3 inline-block rounded-md bg-[#4361ee] px-3 py-1.5 text-[12px] font-bold text-white hover:bg-[#5470f0]"
+              className="inline-block rounded-md bg-[#4361ee] px-3 py-1.5 text-[12px] font-bold text-white hover:bg-[#5470f0]"
             >
               Open Workflow
             </Link>

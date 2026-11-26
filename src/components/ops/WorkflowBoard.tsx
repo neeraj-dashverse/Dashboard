@@ -8,8 +8,10 @@ import { cpsLoad } from "@/lib/ops/cps-load";
 import type { IncomingPromo } from "@/lib/ops/tasks";
 import type { CreditUsage } from "@/lib/ops/types";
 import { DEMARCATE_PROMPT } from "@/lib/ops/workflow-prompt";
+import { cellHref } from "@/lib/ops/incoming-files";
 import { filterWorkflowIncoming, incompleteHandoffs, type HandoffGap } from "@/lib/ops/workflow-queue";
 import { CreditStats } from "./CreditStats";
+import { IncomingPacket } from "./IncomingPacket";
 import { useOps } from "./OpsProvider";
 
 type Draft = {
@@ -135,13 +137,19 @@ function WorkflowCard({
   const named = Boolean(draft.promoName.trim());
   const step = !hasScript ? 1 : !hasAgency ? 2 : !hasDem ? 3 : !named ? 4 : 5;
   const pocketScript = row.scriptLink?.trim() || "";
+  const pocketScriptHref = cellHref(pocketScript);
 
   return (
     <article className="overflow-hidden rounded-2xl border border-white/[0.1] bg-[#161a26]">
       <div className="border-b border-white/[0.06] bg-[#1b2133] px-5 py-4">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">New on PocketFM</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+          New on PocketFM Master Sheet
+        </p>
         <h2 className="mt-1 text-lg font-extrabold text-white">{row.showName || "Untitled show"}</h2>
         <p className="text-[13px] text-slate-400">{named ? draft.promoName : "Promo name still needed before record"}</p>
+        <div className="mt-3">
+          <IncomingPacket row={row} />
+        </div>
         {creditUsage && (
           <div className="mt-3">
             <CreditStats
@@ -169,20 +177,27 @@ function WorkflowCard({
           ))}
         </div>
 
-        <Step n={1} title="Get the original script from PocketFM" done={hasScript} current={step === 1} locked={false}>
+        <Step
+          n={1}
+          title={pocketScript ? "Open the PocketFM script" : "Get the original script from PocketFM"}
+          done={hasScript}
+          current={step === 1}
+          locked={false}
+        >
           {pocketScript ? (
             <p className="text-[13px] leading-5 text-slate-400">
-              This link is column P on the PocketFM Master Sheet. Open it first — that is the source script.
+              PocketFM already put a script on the Master Sheet. Open it, then make a Google copy in the next
+              step.
             </p>
           ) : (
             <p className="text-[13px] leading-5 text-amber-200/90">
-              PocketFM has no script link on this row yet. Paste it if you have it, otherwise wait for PocketFM.
+              PocketFM has no script on this row yet. Paste it if you have it, otherwise wait for PocketFM.
             </p>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {pocketScript && (
+            {pocketScriptHref && (
               <a
-                href={pocketScript}
+                href={pocketScriptHref}
                 target="_blank"
                 rel="noreferrer"
                 className="rounded-lg bg-[#4361ee] px-3 py-2 text-[12px] font-bold text-white hover:bg-[#5470f0]"
@@ -401,12 +416,31 @@ function FillHandoffCard({
   return (
     <article className="overflow-hidden rounded-2xl border border-amber-500/20 bg-[#1b1814]">
       <div className="border-b border-amber-500/15 bg-[#2a2218] px-5 py-4">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-500/80">Named — still missing</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-500/80">
+          Master Tracker · named, still empty
+        </p>
         <h2 className="mt-1 text-lg font-extrabold text-white">
           {row.showName} · {row.promoName}
         </h2>
-        <p className="mt-1 text-[13px] text-amber-100/80">Paste what I listed, then upload. It writes to Master Tracker.</p>
+        <p className="mt-1 text-[13px] text-amber-100/80">
+          Checked your Master Tracker columns E / I / J / K. Paste what is blank, then upload.
+        </p>
         <p className="mt-2 text-[12px] font-semibold text-amber-200">Still need: {row.missing.join(" · ")}</p>
+        <div className="mt-3">
+          <IncomingPacket
+            row={{
+              id: row.promoId,
+              showName: row.showName,
+              promoName: row.promoName,
+              scriptLink: row.pocketFmScript,
+              voSamples: row.voSamples,
+              videoSamples: row.videoSamples,
+              canvasLink: row.canvasLink,
+              showLink: row.showLink,
+              synopsisLink: row.synopsisLink,
+            }}
+          />
+        </div>
       </div>
       <div className="space-y-4 p-5">
         {needCps && (
@@ -579,9 +613,9 @@ export function WorkflowBoard() {
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Intake</p>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Workflow</h1>
         <p className="mt-1 max-w-2xl text-[13px] leading-5 text-slate-400">
-          One step at a time: PocketFM script → Google copy as agency script → demarcate with the prompt →
-          name if blank → assign CP. If you already named a promo, I list what is still missing so you can
-          paste it and I upload it to Master Tracker.
+          Named · missing is your Master Tracker only — CP and script links that are actually blank there.
+          New unnamed rows still come from the PocketFM Master Sheet. One step at a time: script → agency
+          copy → demarcate → name → CP, then I write it to Master Tracker.
         </p>
       </div>
 
@@ -589,7 +623,7 @@ export function WorkflowBoard() {
         <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
           <aside className="space-y-1">
             <p className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-amber-500/80">
-              Named · missing {gaps.length}
+              Master Tracker · missing {gaps.length}
             </p>
             {gaps.map((row) => {
               const selected = (activeGap?.promoId ?? "") === row.promoId;
@@ -643,7 +677,7 @@ export function WorkflowBoard() {
         <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
           <aside className="space-y-1">
             <p className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              Waiting · {incoming.length}
+              PocketFM assigned · {incoming.length}
             </p>
             {incoming.map((row) => {
               const selected = (active?.id ?? "") === row.id;
@@ -662,6 +696,7 @@ export function WorkflowBoard() {
                   <p className="truncate text-[13px] font-semibold">{row.showName || "—"}</p>
                   <p className="truncate text-[11px] text-slate-500">
                     {row.needsName ? "Needs a promo name" : row.promoName}
+                    {row.scriptLink ? " · script in" : " · no script"}
                   </p>
                 </button>
               );

@@ -1,3 +1,4 @@
+import { incomingFileSummary } from "./incoming-files";
 import {
   assetClosedDate,
   buildNudges,
@@ -19,6 +20,11 @@ export type IncomingPromo = {
   masterRow?: number;
   needsName?: boolean;
   scriptLink?: string | null;
+  voSamples?: string | null;
+  videoSamples?: string | null;
+  canvasLink?: string | null;
+  showLink?: string | null;
+  synopsisLink?: string | null;
 };
 
 export type TaskGroup = "new" | "delay" | "match" | "writeback" | "nudge";
@@ -81,7 +87,7 @@ export function buildTasks(snap: OpsSnapshot, incoming: IncomingPromo[]): TaskIt
       group: "new",
       severity: "high",
       title: `New promo from PocketFM: ${name}`,
-      detail: "On the Master Sheet, not yet on Master Tracker. Notify only — nothing is created.",
+      detail: incomingFileSummary(row),
       when: null,
       href: snap.source.url,
     });

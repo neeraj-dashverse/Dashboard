@@ -51,6 +51,11 @@ export async function loadNewMasterPromos(knownIds: string[]): Promise<MasterInc
         masterRow,
         needsName,
         scriptLink: text(r[15]),
+        canvasLink: text(r[17]),
+        voSamples: text(r[18]),
+        videoSamples: text(r[19]),
+        showLink: text(r[20]),
+        synopsisLink: text(r[21]),
       });
     });
     return { catalog, incoming: incoming.slice().reverse() };

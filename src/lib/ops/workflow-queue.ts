@@ -75,26 +75,43 @@ export type HandoffGap = {
   scriptLink: string | null;
   agencyScriptLink: string | null;
   demarcatedScriptLink: string | null;
+  /** PocketFM Master Sheet col P title/link — hint only, not a Tracker fill. */
+  pocketFmScript: string | null;
+  voSamples: string | null;
+  videoSamples: string | null;
+  canvasLink: string | null;
+  showLink: string | null;
+  synopsisLink: string | null;
 };
 
 function blank(value: string | null | undefined): boolean {
   return !value?.trim();
 }
 
+/** True Master Tracker row — not an Assets / Pre-prod stub. */
+export function isMasterTrackerPromo(promo: Promo): boolean {
+  return promo.sheetIndex >= 0 && Boolean(promo.trackerStatus?.trim());
+}
+
 export function handoffGaps(promo: Promo): string[] {
   const missing: string[] = [];
   if (blank(promo.cps)) missing.push("CP name");
-  if (blank(promo.workingScriptLink) && blank(promo.scriptLink)) missing.push("Original script");
+  if (blank(promo.workingScriptLink)) missing.push("Original script");
   if (blank(promo.agencyScriptLink)) missing.push("Agency script");
   if (blank(promo.demarcatedScriptLink)) missing.push("Demarcated script");
   return missing;
 }
 
-/** Named Master Tracker rows that still need CP and/or script links. */
+/**
+ * Named rows on Neeraj's Master Tracker that still need CP and/or I/J/K.
+ * Ignores PocketFM / Assets / Pre-prod stubs — those are not the working sheet.
+ */
 export function incompleteHandoffs(snap: OpsSnapshot): HandoffGap[] {
   const rows: HandoffGap[] = [];
   for (const promo of snap.promos) {
+    if (!isMasterTrackerPromo(promo)) continue;
     if (!promo.promoName.trim()) continue;
+    if (/paused/i.test(promo.trackerStatus ?? "")) continue;
     if (!isOngoingPromo(snap, promo)) continue;
     if (promoHasStartedAnimation(snap, promo.showName, promo.promoName)) continue;
     const missing = handoffGaps(promo);
@@ -106,9 +123,15 @@ export function incompleteHandoffs(snap: OpsSnapshot): HandoffGap[] {
       sheetIndex: promo.sheetIndex,
       missing,
       cps: promo.cps,
-      scriptLink: promo.workingScriptLink ?? promo.scriptLink,
+      scriptLink: promo.workingScriptLink,
       agencyScriptLink: promo.agencyScriptLink,
       demarcatedScriptLink: promo.demarcatedScriptLink,
+      pocketFmScript: promo.scriptLink,
+      voSamples: promo.voSamples,
+      videoSamples: promo.videoSamples,
+      canvasLink: promo.canvasLink,
+      showLink: promo.showLink,
+      synopsisLink: promo.synopsisLink,
     });
   }
   return rows.sort((a, b) => byLatestPromo(a, b) || a.showName.localeCompare(b.showName));
