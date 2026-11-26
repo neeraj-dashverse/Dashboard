@@ -251,20 +251,85 @@ export function perMinCredits(total: number | null | undefined, minutes: number 
   return total / minutes;
 }
 
+function partMinutes(part: { durationSec: number; workedDurationSec: number | null }): number {
+  const sec =
+    part.workedDurationSec && part.workedDurationSec > 0 ? part.workedDurationSec : part.durationSec || 0;
+  return sec > 0 ? sec / 60 : 0;
+}
+
+function partsForPromo(snap: OpsSnapshot, promoId: string) {
+  const base = promoId.split("#")[0];
+  return snap.parts.filter((part) => part.promoId === promoId || part.promoId.split("#")[0] === base);
+}
+
+function findPromo(snap: OpsSnapshot, promoId: string | null | undefined): Promo | undefined {
+  if (!promoId) return undefined;
+  const base = promoId.split("#")[0];
+  return snap.promos.find((item) => item.id === promoId || item.id.split("#")[0] === base);
+}
+
+/** Production Tracker minutes, split by team. Generation credits only apply to in-house. */
+export function teamMinutes(
+  snap: OpsSnapshot,
+  promoId: string | null | undefined
+): { inHouseMin: number | null; agencyMin: number | null } {
+  if (!promoId) return { inHouseMin: null, agencyMin: null };
+  const parts = partsForPromo(snap, promoId);
+  if (parts.length === 0) return { inHouseMin: null, agencyMin: null };
+  let inHouse = 0;
+  let agency = 0;
+  for (const part of parts) {
+    const min = partMinutes(part);
+    if (part.team === "agency") agency += min;
+    else inHouse += min;
+  }
+  return { inHouseMin: inHouse, agencyMin: agency };
+}
+
+export type CreditCompare = {
+  inHouseMin: number | null;
+  agencyMin: number | null;
+  /** PFM generation credits ÷ in-house minutes only. */
+  inHousePerMin: number | null;
+  /** Master Tracker col O — sheet's in-house credit / min. */
+  trackerInHousePerMin: number | null;
+  /** Master Sheet Per Min — what agency is paid. */
+  agencyPayPerMin: number | null;
+  agencyPay: number | null;
+};
+
+export function creditCompare(
+  snap: OpsSnapshot,
+  promoId: string | null | undefined,
+  usage: CreditUsage | null | undefined
+): CreditCompare {
+  const promo = findPromo(snap, promoId);
+  const { inHouseMin, agencyMin } = teamMinutes(snap, promoId);
+  const agencyPayPerMin = promo?.perMin ?? null;
+  const agencyPay =
+    agencyPayPerMin != null && agencyMin != null && agencyMin > 0 ? agencyPayPerMin * agencyMin : null;
+  return {
+    inHouseMin,
+    agencyMin,
+    inHousePerMin: perMinCredits(usage?.totalCredits, inHouseMin),
+    trackerInHousePerMin: promo?.creditPerMinInhouse ?? null,
+    agencyPayPerMin,
+    agencyPay,
+  };
+}
+
 /** Duration tab first, then tracker initial duration, then production part lengths. */
 export function workedDurationMin(snap: OpsSnapshot, promoId: string | null | undefined): number | null {
   if (!promoId) return null;
   const row = findDuration(snap, promoId);
   if (row?.totalSec && row.totalSec > 0) return row.totalSec / 60;
   if (row?.workedWithCtaSec && row.workedWithCtaSec > 0) return row.workedWithCtaSec / 60;
-  const promo = snap.promos.find((item) => item.id === promoId || item.id.split("#")[0] === promoId.split("#")[0]);
+  const promo = findPromo(snap, promoId);
   if (promo?.durationMin && promo.durationMin > 0) return promo.durationMin;
   if (promo?.initialDurationSec && promo.initialDurationSec > 0) return promo.initialDurationSec / 60;
-  const base = promoId.split("#")[0];
-  const sec = snap.parts
-    .filter((part) => part.promoId === promoId || part.promoId.split("#")[0] === base)
-    .reduce((sum, part) => sum + (part.durationSec || 0), 0);
-  return sec > 0 ? sec / 60 : null;
+  const { inHouseMin, agencyMin } = teamMinutes(snap, promoId);
+  const total = (inHouseMin ?? 0) + (agencyMin ?? 0);
+  return total > 0 ? total : null;
 }
 
 function parseNum(value: unknown): number | null {

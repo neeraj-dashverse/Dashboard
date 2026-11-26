@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
+  creditCompare,
   creditStatusTone,
   formatCredits,
   formatMin,
   formatPerMin,
+  formatUsd,
   isCreditInFlight,
-  perMinCredits,
-  workedDurationMin,
 } from "@/lib/ops/credits";
 import type { CreditUsage } from "@/lib/ops/types";
 import { useOps } from "./OpsProvider";
@@ -46,8 +46,11 @@ export function CreditsBoard() {
   }, [usages, snap.promos, query, filter]);
 
   const matched = usages.filter((row) => row.matchedPromoId);
-  const inFlight = usages.filter((row) => isCreditInFlight(row.status));
   const spend = usages.reduce((sum, row) => sum + (row.totalCredits ?? 0), 0);
+  const agencyPay = usages.reduce((sum, row) => {
+    const compare = creditCompare(snap, row.matchedPromoId, row);
+    return sum + (compare.agencyPay ?? 0);
+  }, 0);
 
   return (
     <div className="space-y-4">
@@ -55,14 +58,14 @@ export function CreditsBoard() {
         <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-500/80">Promo credit only</p>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Credits</h1>
         <p className="mt-1 max-w-2xl text-[13px] leading-5 text-cyan-100/70">
-          Rows that start with PFM and end with Promo. Video, LLM, and image credits, then credits per minute
-          against duration worked. Not written into your Timeline sheet.
+          In-house: PFM video / LLM / image credits against in-house minutes. Agency: paid per minute — not
+          generation credits. Split comes from Production Tracker team.
         </p>
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Kpi label="Promo rows" value={usages.length} />
           <Kpi label="On tracker" value={matched.length} />
-          <Kpi label="In production / agency" value={inFlight.length} tone="text-amber-200" />
-          <Kpi label="Total credits" value={formatCredits(spend)} />
+          <Kpi label="In-house credits" value={formatCredits(spend)} />
+          <Kpi label="Agency pay" value={formatUsd(agencyPay || null)} tone="text-amber-200" />
         </div>
       </div>
 
@@ -102,7 +105,7 @@ export function CreditsBoard() {
         </p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-cyan-500/20">
-          <table className="min-w-[1100px] w-full border-collapse text-left">
+          <table className="min-w-[1280px] w-full border-collapse text-left">
             <thead className="bg-[#152228] text-[10px] font-bold uppercase tracking-wider text-cyan-500/80">
               <tr>
                 <th className="px-3 py-2.5">Promo</th>
@@ -110,19 +113,18 @@ export function CreditsBoard() {
                 <th className="px-3 py-2.5">LLM</th>
                 <th className="px-3 py-2.5">Images</th>
                 <th className="px-3 py-2.5">Total</th>
-                <th className="px-3 py-2.5">Credit min</th>
-                <th className="px-3 py-2.5">/ min</th>
-                <th className="px-3 py-2.5">Worked</th>
-                <th className="px-3 py-2.5">Worked / min</th>
+                <th className="px-3 py-2.5">In-house min</th>
+                <th className="px-3 py-2.5">In-house / min</th>
+                <th className="px-3 py-2.5">Agency min</th>
+                <th className="px-3 py-2.5">Agency / min</th>
+                <th className="px-3 py-2.5">Agency pay</th>
                 <th className="px-3 py-2.5">Tracker</th>
               </tr>
             </thead>
             <tbody className="bg-[#10161c]">
               {rows.map((row) => {
                 const matchedLabel = trackerLabel(snap.promos, row);
-                const sheetPerMin = perMinCredits(row.totalCredits, row.durationMin);
-                const worked = workedDurationMin(snap, row.matchedPromoId);
-                const workedPerMin = perMinCredits(row.totalCredits, worked);
+                const compare = creditCompare(snap, row.matchedPromoId, row);
                 return (
                   <tr key={row.id} className="border-t border-cyan-500/10 hover:bg-cyan-500/[0.04]">
                     <td className="px-3 py-3 align-top">
@@ -142,16 +144,19 @@ export function CreditsBoard() {
                       {formatCredits(row.totalCredits)}
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 align-top text-[12px] tabular-nums text-slate-200">
-                      {formatMin(row.durationMin)}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-3 align-top text-[12px] tabular-nums text-slate-200">
-                      {formatPerMin(sheetPerMin)}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-3 align-top text-[12px] tabular-nums text-slate-200">
-                      {formatMin(worked)}
+                      {formatMin(compare.inHouseMin)}
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 align-top text-[13px] font-extrabold tabular-nums text-cyan-100">
-                      {formatPerMin(workedPerMin)}
+                      {formatPerMin(compare.inHousePerMin)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 align-top text-[12px] tabular-nums text-amber-100">
+                      {formatMin(compare.agencyMin)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 align-top text-[12px] tabular-nums text-amber-100">
+                      {compare.agencyPayPerMin != null ? `${formatUsd(compare.agencyPayPerMin)}/min` : "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 align-top text-[13px] font-extrabold tabular-nums text-amber-100">
+                      {formatUsd(compare.agencyPay)}
                     </td>
                     <td className="px-3 py-3 align-top text-[12px]">
                       {row.matchedPromoId ? (

@@ -15,7 +15,7 @@ import {
 } from "@/lib/ops/selectors";
 import { PFM_DROPDOWNS } from "@/lib/ops/sheet-registry";
 import type { PipelineStage } from "@/lib/ops/types";
-import { workedDurationMin } from "@/lib/ops/credits";
+import { creditCompare } from "@/lib/ops/credits";
 import { KindPill, PriorityPill, SectionTitle, StagePill } from "./ui";
 import { CreditStats } from "./CreditStats";
 import { PartActions } from "./PartActions";
@@ -194,7 +194,7 @@ export function PromoDetail({ promoId }: { promoId: string }) {
           </div>
         </div>
 
-        <CreditStats usage={promo.creditUsage} workedMin={workedDurationMin(snap, promo.id)} />
+        <CreditStats usage={promo.creditUsage} compare={creditCompare(snap, promo.id, promo.creditUsage)} />
 
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">

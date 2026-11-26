@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { findCreditForNames } from "@/lib/ops/credits";
+import { creditCompare, findCreditForNames } from "@/lib/ops/credits";
 import { cpsLoad } from "@/lib/ops/cps-load";
 import type { IncomingPromo } from "@/lib/ops/tasks";
 import type { CreditUsage } from "@/lib/ops/types";
@@ -127,6 +127,7 @@ function WorkflowCard({
   onName: () => void;
   onIntake: () => void;
 }) {
+  const { snap } = useOps();
   const hasScript = Boolean(draft.gotScript && draft.script.trim());
   const hasAgency = Boolean(draft.agencyScript.trim());
   const hasDem = Boolean(draft.demarcatedScript.trim());
@@ -142,7 +143,11 @@ function WorkflowCard({
         <p className="text-[13px] text-slate-400">{named ? draft.promoName : "Promo name still needed before record"}</p>
         {creditUsage && (
           <div className="mt-3">
-            <CreditStats usage={creditUsage} compact />
+            <CreditStats
+              usage={creditUsage}
+              compact
+              compare={creditCompare(snap, creditUsage.matchedPromoId, creditUsage)}
+            />
           </div>
         )}
       </div>

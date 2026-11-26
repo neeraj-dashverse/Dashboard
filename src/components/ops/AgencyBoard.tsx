@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { agencyHandoffs, agencySummary, type AgencyHandoff } from "@/lib/ops/agency";
-import { workedDurationMin } from "@/lib/ops/credits";
+import { creditCompare } from "@/lib/ops/credits";
 import { formatClock, formatDmy, STAGE_LABEL } from "@/lib/ops/selectors";
 import { CreditStats } from "./CreditStats";
 import { useOps } from "./OpsProvider";
@@ -37,13 +37,12 @@ function HandoffRow({
   row,
   open,
   onToggle,
-  workedMin,
 }: {
   row: AgencyHandoff;
   open: boolean;
   onToggle: () => void;
-  workedMin: number | null;
 }) {
+  const { snap } = useOps();
   const ready = row.missing.length === 0;
   return (
     <>
@@ -82,7 +81,11 @@ function HandoffRow({
           {formatDmy(row.deadline)}
         </td>
         <td className="px-3 py-3 align-top">
-          <CreditStats usage={row.creditUsage} compact workedMin={workedMin} />
+          <CreditStats
+            usage={row.creditUsage}
+            compact
+            compare={creditCompare(snap, row.promoId, row.creditUsage)}
+          />
         </td>
         <td className="px-3 py-3 align-top">
           <div className="flex flex-wrap gap-1">
@@ -242,7 +245,6 @@ export function AgencyBoard() {
                   key={row.promoId}
                   row={row}
                   open={openIds.includes(row.promoId)}
-                  workedMin={workedDurationMin(snap, row.promoId)}
                   onToggle={() =>
                     setOpenIds((current) =>
                       current.includes(row.promoId)

@@ -4,24 +4,23 @@ import {
   formatCredits,
   formatMin,
   formatPerMin,
-  perMinCredits,
+  formatUsd,
+  type CreditCompare,
 } from "@/lib/ops/credits";
 import type { CreditUsage } from "@/lib/ops/types";
 
 export function CreditStats({
   usage,
+  compare,
   compact = false,
-  workedMin = null,
 }: {
   usage: CreditUsage | null | undefined;
+  compare?: CreditCompare | null;
   compact?: boolean;
-  workedMin?: number | null;
 }) {
   if (!usage) {
     return <p className="text-[12px] text-slate-600">No PFM Promo credit row</p>;
   }
-  const sheetPerMin = perMinCredits(usage.totalCredits, usage.durationMin);
-  const workedPerMin = perMinCredits(usage.totalCredits, workedMin);
   if (compact) {
     return (
       <div>
@@ -32,7 +31,8 @@ export function CreditStats({
           V {formatCredits(usage.videos)} · LLM {formatCredits(usage.llm)} · Img {formatCredits(usage.images)}
         </p>
         <p className={`text-[11px] ${creditStatusTone(usage.status)}`}>
-          {formatPerMin(workedPerMin ?? sheetPerMin)}
+          In-house {formatPerMin(compare?.inHousePerMin)}
+          {compare?.agencyMin ? ` · Agency ${formatMin(compare.agencyMin)} @ ${formatUsd(compare.agencyPayPerMin)}/min` : ""}
         </p>
       </div>
     );
@@ -55,12 +55,21 @@ export function CreditStats({
         <Stat label="LLM" value={formatCredits(usage.llm)} />
         <Stat label="Images" value={formatCredits(usage.images)} />
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Stat label="Total" value={formatCredits(usage.totalCredits)} />
-        <Stat label="Credit min" value={formatMin(usage.durationMin)} />
-        <Stat label="Worked" value={formatMin(workedMin)} />
-        <Stat label="Worked / min" value={formatPerMin(workedPerMin ?? sheetPerMin)} />
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Stat label="Total credits" value={formatCredits(usage.totalCredits)} />
+        <Stat label="In-house min" value={formatMin(compare?.inHouseMin)} />
+        <Stat label="In-house / min" value={formatPerMin(compare?.inHousePerMin)} />
       </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Stat label="Agency min" value={formatMin(compare?.agencyMin)} />
+        <Stat label="Agency pay / min" value={formatUsd(compare?.agencyPayPerMin)} />
+        <Stat label="Agency pay" value={formatUsd(compare?.agencyPay)} />
+      </div>
+      {compare?.trackerInHousePerMin != null && (
+        <p className="mt-2 text-[11px] text-slate-500">
+          Tracker in-house / min: {formatPerMin(compare.trackerInHousePerMin)}
+        </p>
+      )}
     </div>
   );
 }

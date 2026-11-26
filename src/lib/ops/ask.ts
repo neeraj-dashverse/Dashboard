@@ -1,4 +1,4 @@
-import { formatCredits, formatPerMin, perMinCredits, workedDurationMin } from "./credits";
+import { creditCompare, formatCredits, formatPerMin, formatUsd } from "./credits";
 import type { OpsSnapshot, Part, Promo, QualityReview } from "./types";
 import {
   animatorProductivity,
@@ -834,11 +834,19 @@ function sheetFacts(snap: OpsSnapshot, promo: Promo): string[] {
   if (master) lines.push(`Dashverse Master Sheet: ${master}.`);
   if (promo.creditUsage) {
     const credit = promo.creditUsage;
-    const worked = workedDurationMin(snap, promo.id);
-    const perMin = perMinCredits(credit.totalCredits, worked ?? credit.durationMin);
+    const compare = creditCompare(snap, promo.id, credit);
+    const inHouseBit =
+      compare.inHousePerMin != null
+        ? `, ${formatPerMin(compare.inHousePerMin)} on in-house minutes`
+        : "";
     lines.push(
-      `Promo credits (PFM … Promo, dashboard only): videos ${formatCredits(credit.videos)}, LLM ${formatCredits(credit.llm)}, images ${formatCredits(credit.images)}, total ${formatCredits(credit.totalCredits)}${perMin != null ? `, ${formatPerMin(perMin)}` : ""}.`
+      `In-house credits (PFM … Promo): videos ${formatCredits(credit.videos)}, LLM ${formatCredits(credit.llm)}, images ${formatCredits(credit.images)}, total ${formatCredits(credit.totalCredits)}${inHouseBit}.`
     );
+    if (compare.agencyMin && compare.agencyMin > 0) {
+      lines.push(
+        `Agency is paid per min, not credits: ${Number(compare.agencyMin.toFixed(1))} min${compare.agencyPayPerMin != null ? ` at ${formatUsd(compare.agencyPayPerMin)}/min` : ""}${compare.agencyPay != null ? ` = ${formatUsd(compare.agencyPay)}` : ""}.`
+      );
+    }
   }
   const base = promo.id.split("#")[0];
   const plans = snap.plannerCells
@@ -864,7 +872,7 @@ const SHEET_GUIDE = [
   "Master Productivity: CPS rating and written feedback. This is separate from how many minutes someone worked.",
   "Animation productivity, Master data: one row per artist per day. Date, artist, show, promo, parts worked, and duration worked that day — under 3 min (low), 3-5 min (avg), 5-7 min (high), more than 7 min (highly productive), or correction (ignored).",
   "Dashverse Master Sheet: canvas, delivery files, script links, cost, and payment.",
-  "Credit Consumption Analysis, PFM tab: only rows that start with PFM and end with Promo. Video, LLM, image, total credits, and credits per minute vs duration worked. Read in the dashboard only — not copied into Timeline.",
+  "Credit Consumption Analysis, PFM tab: only PFM … Promo rows. In-house: video, LLM, image credits vs in-house minutes. Agency: paid per min from Master Sheet Per Min × agency minutes on Production Tracker. Dashboard only — not copied into Timeline.",
   "Planner tab: the revised date, and first half, second half, or EOD.",
   "Remarks tab: every time a plan is recorded, kept as its own row.",
 ];
@@ -1254,20 +1262,20 @@ function creditsReply(snap: OpsSnapshot): AskReply {
   return {
     heading: "Promo credits",
     lines: [
-      `${rows.length} PFM Promo row${rows.length === 1 ? "" : "s"}. Video, LLM, and image vs duration worked. Not written into your sheet.`,
+      `${rows.length} PFM Promo row${rows.length === 1 ? "" : "s"}. In-house credits vs in-house minutes; agency is pay per min. Not written into your sheet.`,
     ],
     table: {
       title: "PFM Promo credits",
-      columns: ["Promo", "Videos", "LLM", "Images", "Total", "/ min"],
+      columns: ["Promo", "Videos", "LLM", "Images", "In-house / min", "Agency pay"],
       rows: rows.slice(0, 12).map((row) => {
-        const worked = workedDurationMin(snap, row.matchedPromoId);
+        const compare = creditCompare(snap, row.matchedPromoId, row);
         return [
           row.label,
           formatCredits(row.videos),
           formatCredits(row.llm),
           formatCredits(row.images),
-          formatCredits(row.totalCredits),
-          formatPerMin(perMinCredits(row.totalCredits, worked ?? row.durationMin)),
+          formatPerMin(compare.inHousePerMin),
+          formatUsd(compare.agencyPay),
         ];
       }),
     },
