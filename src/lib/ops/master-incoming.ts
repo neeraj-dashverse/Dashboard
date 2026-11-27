@@ -1,5 +1,5 @@
 import { DASHVERSE_PFM_SHEET } from "./sheet-registry";
-import { batchGet, hasSheetCredentials, text } from "./sheets-client";
+import { batchGet, hasSheetCredentials, overlayMasterFileLinks, text } from "./sheets-client";
 import type { IncomingPromo } from "./tasks";
 import { promoJoinKey } from "./types";
 
@@ -22,6 +22,7 @@ export async function loadNewMasterPromos(knownIds: string[]): Promise<MasterInc
     const range = `'${DASHVERSE_PFM_SHEET.tabs.master.name}'!A1:Z3000`;
     const book = await batchGet(DASHVERSE_PFM_SHEET.spreadsheetId, [range]);
     const rows = book[range] ?? [];
+    await overlayMasterFileLinks(DASHVERSE_PFM_SHEET.spreadsheetId, DASHVERSE_PFM_SHEET.tabs.master.name, rows);
     const catalog: string[] = [];
     const incoming: IncomingPromo[] = [];
     const seen = new Set<string>();

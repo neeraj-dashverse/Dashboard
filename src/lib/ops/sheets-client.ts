@@ -56,6 +56,79 @@ export async function batchGet(
   return out;
 }
 
+export type SheetLink = { text: string | null; href: string | null };
+
+function formulaUrl(formula: string | null | undefined): string | null {
+  if (!formula) return null;
+  const match = formula.match(/HYPERLINK\s*\(\s*"([^"]+)"/i);
+  return match?.[1]?.trim() || null;
+}
+
+function cellHrefFromGrid(cell: {
+  formattedValue?: string | null;
+  hyperlink?: string | null;
+  userEnteredValue?: { formulaValue?: string | null; stringValue?: string | null } | null;
+  chipRuns?: Array<{ chip?: { richLinkProperties?: { uri?: string | null } | null } | null } | null> | null;
+}): string | null {
+  const chip = cell.chipRuns?.map((run) => run?.chip?.richLinkProperties?.uri).find((uri) => uri?.trim());
+  const raw =
+    chip?.trim() ||
+    cell.hyperlink?.trim() ||
+    formulaUrl(cell.userEnteredValue?.formulaValue) ||
+    "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const text = (cell.formattedValue || cell.userEnteredValue?.stringValue || "").trim();
+  if (/^https?:\/\//i.test(text)) return text;
+  return null;
+}
+
+/** Smart-chip / hyperlink cells — values.batchGet only returns the title. */
+export async function readGridLinks(spreadsheetId: string, range: string): Promise<SheetLink[][]> {
+  const sheets = sheetsClient();
+  const res = await sheets.spreadsheets.get({
+    spreadsheetId,
+    ranges: [range],
+    fields:
+      "sheets.data.rowData.values(formattedValue,hyperlink,userEnteredValue,chipRuns.chip.richLinkProperties.uri)",
+  });
+  const rows = res.data.sheets?.[0]?.data?.[0]?.rowData ?? [];
+  return rows.map((row) =>
+    (row.values ?? []).map((cell) => {
+      const text = (cell.formattedValue || cell.userEnteredValue?.stringValue || "").trim() || null;
+      return { text, href: cellHrefFromGrid(cell) };
+    })
+  );
+}
+
+/** PocketFM Master Sheet P–V: Script, Canvas, VO, Video, Show, Synopsis chips → real URLs. */
+export async function overlayMasterFileLinks(
+  spreadsheetId: string,
+  tabName: string,
+  rows: Grid
+): Promise<void> {
+  try {
+    const links = await readGridLinks(spreadsheetId, `'${tabName}'!P1:V3000`);
+    overlayHrefs(rows, links, 15);
+  } catch (err) {
+    console.error("[ops] Master Sheet chip-link read failed:", err);
+  }
+}
+
+/** Replace title-only file cells with the real Google Doc/Drive URL when Sheets stored a chip. */
+export function overlayHrefs(rows: Grid, links: SheetLink[][], startCol: number): void {
+  for (let i = 0; i < links.length; i++) {
+    const linkRow = links[i] ?? [];
+    if (!rows[i]) rows[i] = [];
+    for (let j = 0; j < linkRow.length; j++) {
+      const href = linkRow[j]?.href;
+      if (!href) continue;
+      const col = startCol + j;
+      while (rows[i].length <= col) rows[i].push("");
+      rows[i][col] = href;
+    }
+  }
+}
+
 // ── Cell parsers ────────────────────────────────────────────────────────────
 
 /** A broken formula cell (#REF!, #N/A, etc.) — never a real value. */

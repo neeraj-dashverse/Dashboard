@@ -43,9 +43,8 @@ export function IncomingPacket({
       {!compact && script?.added && (
         <p className="text-[13px] leading-5 text-amber-100/90">
           Script is on the PocketFM sheet
-          {script.value && !script.href ? ` (“${script.value}”)` : ""}. Open it, then{" "}
-          <span className="font-semibold text-white">File → Make a copy</span> — that copy is the
-          agency script.
+          {script.value && !script.href ? ` (“${script.value}”)` : ""}. Approve paste to put it on
+          Master Tracker — I will also make a Google copy for the agency.
         </p>
       )}
       {!compact && script && !script.added && (
@@ -54,7 +53,7 @@ export function IncomingPacket({
         </p>
       )}
       {compact && script?.added && (
-        <p className="text-[12px] text-amber-200/80">Script is there — make a Google copy in Workflow.</p>
+        <p className="text-[12px] text-amber-200/80">Script is there — paste it in Workflow and I will copy the Doc.</p>
       )}
     </div>
   );

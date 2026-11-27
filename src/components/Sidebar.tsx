@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { fetchIncoming } from "@/lib/ops/incoming-client";
+import { scriptAlerts } from "@/lib/ops/script-watch";
 import { filterWorkflowIncoming, incompleteHandoffs } from "@/lib/ops/workflow-queue";
 import { useOps } from "./ops/OpsProvider";
 
@@ -30,7 +31,11 @@ export function Sidebar() {
   const [open, setOpen] = useState(true);
   const [newCount, setNewCount] = useState(0);
   const gapCount = useMemo(() => (snap.live ? incompleteHandoffs(snap).length : 0), [snap]);
-  const workflowBadge = newCount + gapCount;
+  const updateCount = useMemo(
+    () => (snap.live ? scriptAlerts(snap).filter((row) => row.kind === "updated").length : 0),
+    [snap]
+  );
+  const workflowBadge = newCount + gapCount + updateCount;
 
   useEffect(() => {
     setPathname(window.location.pathname);

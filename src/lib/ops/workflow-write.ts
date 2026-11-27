@@ -1,3 +1,5 @@
+import { copyGoogleFile } from "./drive-copy";
+import { googleFileId } from "./google-file";
 import { PFM_TIMELINE_SHEET } from "./sheet-registry";
 import { batchGet, hasSheetCredentials, text } from "./sheets-client";
 import { appendSheetRow, updateSheetValues } from "./sheets-write";
@@ -137,4 +139,65 @@ export async function writeTrackerHandoff(
 
   await updateSheetValues(PFM_TIMELINE_SHEET.spreadsheetId, range, [current]);
   return { trackerRow: existing, promoId: promoJoinKey(showName, promoName) };
+}
+
+export type PasteScriptResult = {
+  trackerRow: number;
+  promoId: string;
+  script: string;
+  copyUrl: string | null;
+  copyError: string | null;
+};
+
+/**
+ * Write the PocketFM script URL onto Master Tracker I.
+ * When makeCopy is set, Drive-copies the Google Doc and writes that copy to J.
+ */
+export async function pastePocketFmScript(opts: {
+  showName: string;
+  promoName: string;
+  script: string;
+  makeCopy: boolean;
+  shareWith?: string | null;
+}): Promise<PasteScriptResult> {
+  const showName = opts.showName.trim();
+  const promoName = opts.promoName.trim();
+  const script = opts.script.trim();
+  if (!showName || !promoName) throw new Error("Show and promo name are required.");
+  if (!script) throw new Error("No PocketFM script to paste.");
+
+  let existing = await findTrackerRow(showName, promoName);
+  if (!existing) {
+    await writeTrackerPromoName(showName, promoName);
+    existing = await findTrackerRow(showName, promoName);
+  }
+  if (!existing) throw new Error("Could not add this promo to Master Tracker.");
+
+  await writeTrackerHandoff({ showName, promoName, script });
+
+  let copyUrl: string | null = null;
+  let copyError: string | null = null;
+  if (opts.makeCopy) {
+    if (!googleFileId(script)) {
+      copyError = "PocketFM script is not a Google Doc link, so I could not make a copy.";
+    } else {
+      try {
+        const copied = await copyGoogleFile(script, opts.shareWith);
+        copyUrl = copied.url;
+        await writeTrackerHandoff({ showName, promoName, agencyScript: copied.url });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Drive copy failed.";
+        copyError = message;
+        console.error("[ops] script copy failed:", err);
+      }
+    }
+  }
+
+  return {
+    trackerRow: existing,
+    promoId: promoJoinKey(showName, promoName),
+    script,
+    copyUrl,
+    copyError,
+  };
 }

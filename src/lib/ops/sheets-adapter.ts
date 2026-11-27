@@ -17,7 +17,15 @@ import {
   PFM_TIMELINE_SHEET,
 } from "./sheet-registry";
 import { attachCreditsToPromos, parseCreditUsages } from "./credits";
-import { batchGet, hasSheetCredentials, normKey, splitNames, text, type Grid } from "./sheets-client";
+import {
+  batchGet,
+  hasSheetCredentials,
+  overlayMasterFileLinks,
+  normKey,
+  splitNames,
+  text,
+  type Grid,
+} from "./sheets-client";
 import {
   buildAnimators,
   parseAnimatorRoster,
@@ -253,7 +261,13 @@ export async function loadFromSheets(): Promise<OpsSnapshot> {
     promos.push(stub);
   }
 
-  const masterDetails = parseMasterDetails(masterBook[masterRange] ?? []);
+  const masterRows = masterBook[masterRange] ?? [];
+  await overlayMasterFileLinks(
+    DASHVERSE_PFM_SHEET.spreadsheetId,
+    DASHVERSE_PFM_SHEET.tabs.master.name,
+    masterRows
+  );
+  const masterDetails = parseMasterDetails(masterRows);
   for (const promo of promos) {
     const detail = matchMasterDetail(promo, masterDetails);
     if (detail) applyMasterDetail(promo, detail);

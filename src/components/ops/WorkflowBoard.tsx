@@ -9,9 +9,12 @@ import type { IncomingPromo } from "@/lib/ops/tasks";
 import type { CreditUsage } from "@/lib/ops/types";
 import { DEMARCATE_PROMPT } from "@/lib/ops/workflow-prompt";
 import { cellHref } from "@/lib/ops/incoming-files";
+import { scriptState } from "@/lib/ops/google-file";
+import { scriptAlerts } from "@/lib/ops/script-watch";
 import { filterWorkflowIncoming, incompleteHandoffs, type HandoffGap } from "@/lib/ops/workflow-queue";
 import { CreditStats } from "./CreditStats";
 import { IncomingPacket } from "./IncomingPacket";
+import { ScriptPasteBar } from "./ScriptPasteBar";
 import { useOps } from "./OpsProvider";
 
 type Draft = {
@@ -117,6 +120,7 @@ function WorkflowCard({
   onCopyPrompt,
   onName,
   onIntake,
+  onPasteScript,
 }: {
   row: IncomingPromo;
   draft: Draft;
@@ -129,6 +133,7 @@ function WorkflowCard({
   onCopyPrompt: () => void;
   onName: () => void;
   onIntake: () => void;
+  onPasteScript: (promoName: string, script: string, makeCopy: boolean) => void;
 }) {
   const { snap } = useOps();
   const hasScript = Boolean(draft.gotScript && draft.script.trim());
@@ -150,6 +155,16 @@ function WorkflowCard({
         <div className="mt-3">
           <IncomingPacket row={row} />
         </div>
+        {draft.promoName.trim() && pocketScript && (
+          <div className="mt-3">
+            <ScriptPasteBar
+              script={pocketScriptHref || pocketScript}
+              kind="paste"
+              busy={busy}
+              onPaste={(script, makeCopy) => onPasteScript(draft.promoName, script, makeCopy)}
+            />
+          </div>
+        )}
         {creditUsage && (
           <div className="mt-3">
             <CreditStats
@@ -391,12 +406,14 @@ function FillHandoffCard({
   busy,
   error,
   onUpload,
+  onPasteScript,
 }: {
   row: HandoffGap;
   cps: ReturnType<typeof cpsLoad>;
   busy: boolean;
   error: string;
   onUpload: (patch: { cps: string; script: string; agencyScript: string; demarcatedScript: string }) => void;
+  onPasteScript: (script: string, makeCopy: boolean) => void;
 }) {
   const [cpsName, setCpsName] = useState(row.cps ?? "");
   const [script, setScript] = useState(row.scriptLink ?? "");
@@ -407,6 +424,7 @@ function FillHandoffCard({
   const needScript = !row.scriptLink;
   const needAgency = !row.agencyScriptLink;
   const needDem = !row.demarcatedScriptLink;
+  const pfmState = scriptState(row.pocketFmScript, row.scriptLink);
   const ready =
     (needCps && cpsName.trim()) ||
     (needScript && script.trim()) ||
@@ -441,6 +459,16 @@ function FillHandoffCard({
             }}
           />
         </div>
+        {pfmState !== "same" && (
+          <div className="mt-3">
+            <ScriptPasteBar
+              script={row.pocketFmScript}
+              kind={pfmState}
+              busy={busy}
+              onPaste={onPasteScript}
+            />
+          </div>
+        )}
       </div>
       <div className="space-y-4 p-5">
         {needCps && (
@@ -528,8 +556,14 @@ export function WorkflowBoard() {
   const [copied, setCopied] = useState(false);
   const cps = useMemo(() => cpsLoad(snap), [snap]);
   const gaps = useMemo(() => incompleteHandoffs(snap), [snap]);
+  const updates = useMemo(
+    () => scriptAlerts(snap).filter((row) => row.kind === "updated"),
+    [snap]
+  );
   const [gapId, setGapId] = useState("");
+  const [updateId, setUpdateId] = useState("");
   const activeGap = gaps.find((row) => row.promoId === gapId) ?? gaps[0] ?? null;
+  const activeUpdate = updates.find((row) => row.promoId === updateId) ?? updates[0] ?? null;
 
   useEffect(() => {
     setDrafts(loadDrafts());
@@ -593,13 +627,16 @@ export function WorkflowBoard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = (await res.json()) as { error?: string };
+      const data = (await res.json()) as { error?: string; copyError?: string };
       if (!res.ok) {
         setError(data.error || "Could not write to Master Tracker.");
         return;
       }
       bustIncomingCache();
       await reset();
+      if (data.copyError) {
+        setError(`Script pasted to Master Tracker. Copy failed: ${data.copyError}`);
+      }
     } catch {
       setError("Could not write to Master Tracker.");
     } finally {
@@ -613,11 +650,66 @@ export function WorkflowBoard() {
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Intake</p>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Workflow</h1>
         <p className="mt-1 max-w-2xl text-[13px] leading-5 text-slate-400">
-          Named · missing is your Master Tracker only — CP and script links that are actually blank there.
-          New unnamed rows still come from the PocketFM Master Sheet. One step at a time: script → agency
-          copy → demarcate → name → CP, then I write it to Master Tracker.
+          When PocketFM adds a promo, I show the script link here. Approve paste to put it on Master
+          Tracker and I make a Google copy. If they change that script later, I flag it.
         </p>
       </div>
+
+      {updates.length > 0 && (
+        <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
+          <aside className="space-y-1">
+            <p className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-rose-300/80">
+              Script updated · {updates.length}
+            </p>
+            {updates.map((row) => {
+              const selected = (activeUpdate?.promoId ?? "") === row.promoId;
+              return (
+                <button
+                  key={row.promoId}
+                  type="button"
+                  onClick={() => {
+                    setUpdateId(row.promoId);
+                    setError("");
+                  }}
+                  className={`w-full rounded-xl px-3 py-2.5 text-left ${
+                    selected ? "bg-rose-500/15 text-white" : "text-slate-300 hover:bg-white/[0.04]"
+                  }`}
+                >
+                  <p className="truncate text-[13px] font-semibold">{row.showName}</p>
+                  <p className="truncate text-[11px] text-rose-200/80">{row.promoName} · changed on PocketFM</p>
+                </button>
+              );
+            })}
+          </aside>
+          {activeUpdate && (
+            <article className="rounded-2xl border border-rose-500/20 bg-[#1b1416] p-5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-rose-300/80">
+                PocketFM script changed
+              </p>
+              <h2 className="mt-1 text-lg font-extrabold text-white">
+                {activeUpdate.showName} · {activeUpdate.promoName}
+              </h2>
+              <div className="mt-3">
+                <ScriptPasteBar
+                  script={activeUpdate.pfmScript}
+                  kind="updated"
+                  busy={busy}
+                  onPaste={(script, makeCopy) =>
+                    post({
+                      action: "paste-script",
+                      showName: activeUpdate.showName,
+                      promoName: activeUpdate.promoName,
+                      script,
+                      makeCopy,
+                    })
+                  }
+                />
+              </div>
+              {error && <p className="mt-3 text-[12px] text-rose-300">{error}</p>}
+            </article>
+          )}
+        </div>
+      )}
 
       {gaps.length > 0 && (
         <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
@@ -658,6 +750,15 @@ export function WorkflowBoard() {
                   showName: activeGap.showName,
                   promoName: activeGap.promoName,
                   ...patch,
+                })
+              }
+              onPasteScript={(script, makeCopy) =>
+                post({
+                  action: "paste-script",
+                  showName: activeGap.showName,
+                  promoName: activeGap.promoName,
+                  script,
+                  makeCopy,
                 })
               }
             />
@@ -714,6 +815,15 @@ export function WorkflowBoard() {
               error={error}
               copied={copied}
               onCopyPrompt={copyPrompt}
+              onPasteScript={(promoName, script, makeCopy) =>
+                post({
+                  action: "paste-script",
+                  showName: active.showName,
+                  promoName,
+                  script,
+                  makeCopy,
+                })
+              }
               onName={() =>
                 post({
                   action: "name",

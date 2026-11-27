@@ -96,7 +96,7 @@ export function parsePromos(rows: Grid): Promo[] {
       deliverableWithFinalCorrections: null,
       finalCorrectedFiles: null,
       comments: null,
-      scriptLink: text(r[8]),
+      scriptLink: null,
       scriptFormatDone: null,
       canvasLink: null,
       voSamples: null,

@@ -7,6 +7,7 @@ import { loadOutsidePlots, saveOutsidePlots, plotForName, type OutsidePlot } fro
 import { formatDmy } from "@/lib/ops/selectors";
 import type { IncomingPromo } from "@/lib/ops/tasks";
 import { fetchIncoming } from "@/lib/ops/incoming-client";
+import { scriptAlerts } from "@/lib/ops/script-watch";
 import { filterWorkflowIncoming, incompleteHandoffs } from "@/lib/ops/workflow-queue";
 import { IncomingPacket } from "./IncomingPacket";
 import { Kpi, SectionTitle } from "./ui";
@@ -21,6 +22,10 @@ export function HomeBoard() {
   const leaves = useMemo(() => homeLeaves(snap), [snap]);
   const delays = useMemo(() => homeDelays(snap), [snap]);
   const gaps = useMemo(() => incompleteHandoffs(snap), [snap]);
+  const scriptUpdates = useMemo(
+    () => scriptAlerts(snap).filter((row) => row.kind === "updated"),
+    [snap]
+  );
   const sheetFree = useMemo(() => homeFree(snap), [snap]);
   const followUp = useMemo(
     () => plots.filter((plot) => plot.until <= snap.today),
@@ -181,6 +186,34 @@ export function HomeBoard() {
           </div>
         )}
       </section>
+
+      {scriptUpdates.length > 0 && (
+        <section className="space-y-2">
+          <SectionTitle
+            title="Script changed on PocketFM"
+            hint="Someone updated the PocketFM script after it was on Master Tracker"
+            count={scriptUpdates.length}
+          />
+          <div className="rounded-xl border border-rose-500/25 bg-[#1b1416] px-4 py-3">
+            <ul className="space-y-1.5">
+              {scriptUpdates.slice(0, 6).map((row) => (
+                <li key={row.promoId} className="text-[13px] text-slate-200">
+                  <span className="font-semibold text-white">
+                    {row.showName} · {row.promoName}
+                  </span>
+                  <span className="text-rose-200/80"> · script updated</span>
+                </li>
+              ))}
+            </ul>
+            <Link
+              href="/workflow"
+              className="mt-3 inline-block rounded-md bg-[#4361ee] px-3 py-1.5 text-[12px] font-bold text-white hover:bg-[#5470f0]"
+            >
+              Review and paste
+            </Link>
+          </div>
+        </section>
+      )}
 
       {gaps.length > 0 && (
         <section className="space-y-2">
