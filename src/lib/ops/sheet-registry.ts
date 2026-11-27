@@ -45,6 +45,12 @@ export const WRITE_ROLES = {
 /** Contact for sheet share / ops. */
 export const OPS_CONTACT_EMAIL = "neeraj.d@dashverse.ai";
 
+/** Shared Drive folder where agency script copies are stored (SA has no My Drive quota). */
+export const SCRIPT_COPIES_FOLDER = {
+  id: "11GwUrR6AE7vp2mvFmj3cL5FYJJ7cNeYc",
+  url: "https://drive.google.com/drive/folders/11GwUrR6AE7vp2mvFmj3cL5FYJJ7cNeYc",
+} as const;
+
 /**
  * Daily animation throughput log — separate from Timeline Master Productivity (quality).
  * See pfm-animation-productivity-schema.md.

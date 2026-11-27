@@ -9,7 +9,7 @@ import type { IncomingPromo } from "@/lib/ops/tasks";
 import type { CreditUsage } from "@/lib/ops/types";
 import { DEMARCATE_PROMPT } from "@/lib/ops/workflow-prompt";
 import { cellHref } from "@/lib/ops/incoming-files";
-import { scriptState } from "@/lib/ops/google-file";
+import { googleFileId, scriptState } from "@/lib/ops/google-file";
 import { scriptAlerts } from "@/lib/ops/script-watch";
 import { filterWorkflowIncoming, incompleteHandoffs, type HandoffGap } from "@/lib/ops/workflow-queue";
 import { CreditStats } from "./CreditStats";
@@ -459,11 +459,11 @@ function FillHandoffCard({
             }}
           />
         </div>
-        {pfmState !== "same" && (
+        {(pfmState !== "same" || (needAgency && googleFileId(row.scriptLink || row.pocketFmScript))) && (
           <div className="mt-3">
             <ScriptPasteBar
-              script={row.pocketFmScript}
-              kind={pfmState}
+              script={row.pocketFmScript || row.scriptLink}
+              kind={pfmState === "same" ? "copy" : pfmState}
               busy={busy}
               onPaste={onPasteScript}
             />

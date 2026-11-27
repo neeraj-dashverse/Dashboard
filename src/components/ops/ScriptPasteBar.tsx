@@ -8,7 +8,7 @@ export function ScriptPasteBar({
   onPaste,
 }: {
   script: string | null | undefined;
-  kind: "paste" | "updated";
+  kind: "paste" | "updated" | "copy";
   busy: boolean;
   onPaste: (script: string, makeCopy: boolean) => void;
 }) {
@@ -27,7 +27,9 @@ export function ScriptPasteBar({
       <p className="text-[12px] font-semibold text-white">
         {kind === "updated"
           ? "Someone changed the script on the PocketFM sheet."
-          : "PocketFM added a script. Approve to paste it onto Master Tracker."}
+          : kind === "copy"
+            ? "Script is on Master Tracker. Make the Google copy for the agency (column J)."
+            : "PocketFM added a script. Approve to paste it onto Master Tracker."}
       </p>
       {href ? (
         <a
@@ -48,16 +50,22 @@ export function ScriptPasteBar({
           onClick={() => onPaste(href || script, true)}
           className="rounded-lg bg-[#4361ee] px-3 py-2 text-[12px] font-bold text-white hover:bg-[#5470f0] disabled:opacity-40"
         >
-          {kind === "updated" ? "Paste update and make a copy" : "Paste to Master Tracker and make a copy"}
+          {kind === "updated"
+            ? "Paste update and make a copy"
+            : kind === "copy"
+              ? "Make Google copy"
+              : "Paste to Master Tracker and make a copy"}
         </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => onPaste(href || script, false)}
-          className="rounded-lg bg-white/[0.08] px-3 py-2 text-[12px] font-bold text-white hover:bg-white/[0.12] disabled:opacity-40"
-        >
-          Paste link only
-        </button>
+        {kind !== "copy" && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onPaste(href || script, false)}
+            className="rounded-lg bg-white/[0.08] px-3 py-2 text-[12px] font-bold text-white hover:bg-white/[0.12] disabled:opacity-40"
+          >
+            Paste link only
+          </button>
+        )}
         {copyHref && (
           <a
             href={copyHref}
